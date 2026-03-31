@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "npa-repayment-agent": {
+      "type": "stdio",
+      "command": "C:\\Users\\marcozhu\\.workbuddy\\binaries\\python\\envs\\default\\Scripts\\python.exe",
+      "args": [
+        "-m",
+        "npa_repayment_agent.mcp_server"
+      ],
+      "env": {
+        "PYTHONPATH": "c:\\Users\\marcozhu\\Desktop\\6980"
+      },
+      "description": "Unsecured debt/NPA repayment prediction and collection strategy agent"
+    }
+  }
+}

@@ -1,0 +1,114 @@
+{
+  "data_overview": {
+    "rows": 16048,
+    "model_rows": 12036,
+    "test_rows": 4012,
+    "overall_positive_rate_pct": 9.65,
+    "model_positive_rate_pct": 9.81,
+    "test_positive_rate_pct": 9.15,
+    "missing_last_pay_date_client_closing_m": 1165,
+    "missing_last_act_closing_m": 31
+  },
+  "model_selection": {
+    "balanced_random_forest": {
+      "roc_auc": 0.7139362299840809,
+      "recall": 0.7245762711864406,
+      "precision": 0.16026241799437677,
+      "threshold": 0.43,
+      "confusion_matrix": {
+        "tn": 1276,
+        "fp": 896,
+        "fn": 65,
+        "tp": 171
+      },
+      "valid_threshold_search": {
+        "threshold": 0.43,
+        "f2": 0.42516161113873696,
+        "recall": 0.7245762711864406,
+        "precision": 0.16026241799437677
+      }
+    },
+    "xgboost": {
+      "roc_auc": 0.7302201360926429,
+      "recall": 0.7711864406779662,
+      "precision": 0.16651418115279049,
+      "threshold": 0.38,
+      "confusion_matrix": {
+        "tn": 1261,
+        "fp": 911,
+        "fn": 54,
+        "tp": 182
+      },
+      "valid_threshold_search": {
+        "threshold": 0.38,
+        "f2": 0.44673539518900346,
+        "recall": 0.7711864406779662,
+        "precision": 0.16651418115279049
+      }
+    }
+  },
+  "best_model": "xgboost",
+  "test_metrics": {
+    "roc_auc": 0.7357628493363684,
+    "recall": 0.8092643051771117,
+    "precision": 0.15153061224489797,
+    "threshold": 0.38,
+    "confusion_matrix": {
+      "tn": 1982,
+      "fp": 1663,
+      "fn": 70,
+      "tp": 297
+    }
+  },
+  "top_features": [
+    {
+      "feature": "birth_yr",
+      "importance": 0.12948512949320293
+    },
+    {
+      "feature": "district",
+      "importance": 0.051280429687938
+    },
+    {
+      "feature": "purchased_bal_gp",
+      "importance": 0.04218432177257492
+    },
+    {
+      "feature": "last_act_closing_m",
+      "importance": 0.023918173901017782
+    },
+    {
+      "feature": "co_closing_m",
+      "importance": 0.021263871601948092
+    },
+    {
+      "feature": "last_pay_date_client_closing_m",
+      "importance": 0.01162915867729677
+    },
+    {
+      "feature": "multiple_acct",
+      "importance": 0.010063130038909662
+    },
+    {
+      "feature": "home_phone_flag",
+      "importance": 0.00852692838160598
+    },
+    {
+      "feature": "mobile_phone_flag",
+      "importance": 0.0035272087103755513
+    },
+    {
+      "feature": "open_closing_m",
+      "importance": 0.0032323775991149883
+    }
+  ],
+  "concentration": {
+    "top20_accounts": 802,
+    "overall_actual_payer_rate_pct": 9.15,
+    "prob_top20_actual_payer_rate_pct": 20.7,
+    "prob_top20_actual_payer_capture_share_pct": 45.23,
+    "ev_top20_actual_payer_rate_pct": 9.6,
+    "ev_top20_actual_payer_capture_share_pct": 20.98,
+    "ev_top20_expected_value_capture_share_pct": 45.12
+  }
+}
