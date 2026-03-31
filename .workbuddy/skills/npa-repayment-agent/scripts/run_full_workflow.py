@@ -17,10 +17,16 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the full NPA repayment workflow and generate a collection strategy report.")
     parser.add_argument("file_path", help="Path to the source Excel file")
     parser.add_argument("--output-dir", default="", help="Optional output directory")
+    parser.add_argument("--config-path", default="", help="Optional JSON file with production economics and capacity assumptions")
     args = parser.parse_args()
 
-    result = build_collection_strategy_report(file_path=args.file_path, output_dir=args.output_dir or None)
+    result = build_collection_strategy_report(
+        file_path=args.file_path,
+        output_dir=args.output_dir or None,
+        config_path=args.config_path or None,
+    )
     print(json.dumps(result, ensure_ascii=False, indent=2))
+
 
 
 if __name__ == "__main__":

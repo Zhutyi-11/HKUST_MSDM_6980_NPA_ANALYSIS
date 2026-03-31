@@ -1,0 +1,23 @@
+{
+  "source_file": "C:\\Users\\marcozhu\\Desktop\\6980\\data.xlsx",
+  "model_path": "C:\\Users\\marcozhu\\Desktop\\6980\\agent_outputs\\production_run\\npa_repayment_model.joblib",
+  "output_dir": "C:\\Users\\marcozhu\\Desktop\\6980\\agent_outputs\\policy_reopt",
+  "threshold": 0.09,
+  "rows": 16048,
+  "policy_summary": {
+    "accounts": 16048,
+    "expected_gross_recovery_total": 10540015.25,
+    "expected_net_recovery_total": 10206434.25,
+    "contact_cost_total": 333581.0,
+    "expected_roi": 30.5966,
+    "queue_mix": {
+      "Medium Priority (Auto-Dialer)": 6740,
+      "Low Priority (SMS/Email)": 4814,
+      "High Priority (Agent Call)": 2888,
+      "Write-off / Ignore": 1606
+    }
+  },
+  "queue_summary_path": "C:\\Users\\marcozhu\\Desktop\\6980\\agent_outputs\\policy_reopt\\recommended_queue_summary.csv",
+  "scored_path": "C:\\Users\\marcozhu\\Desktop\\6980\\agent_outputs\\policy_reopt\\policy_scored_accounts.csv",
+  "config_used_path": "C:\\Users\\marcozhu\\Desktop\\6980\\agent_outputs\\policy_reopt\\production_config_used.json"
+}

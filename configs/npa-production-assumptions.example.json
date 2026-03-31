@@ -1,0 +1,25 @@
+{
+  "calibration": {
+    "enabled": true,
+    "method": "platt",
+    "oof_folds": 5
+  },
+  "economics": {
+    "balance_recovery_rate": 0.35,
+    "agent_call_cost": 85.0,
+    "auto_dialer_cost": 12.0,
+    "sms_email_cost": 1.5,
+    "agent_call_multiplier": 1.0,
+    "auto_dialer_multiplier": 0.72,
+    "sms_email_multiplier": 0.35
+  },
+  "capacity": {
+    "max_agent_ratio": 0.18,
+    "max_auto_ratio": 0.42,
+    "max_sms_ratio": 0.30
+  },
+  "selection": {
+    "primary_metric": "expected_net_recovery_total",
+    "secondary_metric": "roc_auc"
+  }
+}

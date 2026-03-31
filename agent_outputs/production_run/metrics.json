@@ -1,0 +1,278 @@
+{
+  "production_config": {
+    "calibration": {
+      "enabled": true,
+      "method": "platt",
+      "oof_folds": 5
+    },
+    "economics": {
+      "balance_recovery_rate": 0.35,
+      "agent_call_cost": 85.0,
+      "auto_dialer_cost": 12.0,
+      "sms_email_cost": 1.5,
+      "agent_call_multiplier": 1.0,
+      "auto_dialer_multiplier": 0.72,
+      "sms_email_multiplier": 0.35
+    },
+    "capacity": {
+      "max_agent_ratio": 0.18,
+      "max_auto_ratio": 0.42,
+      "max_sms_ratio": 0.3
+    },
+    "selection": {
+      "primary_metric": "expected_net_recovery_total",
+      "secondary_metric": "roc_auc"
+    }
+  },
+  "data_overview": {
+    "rows": 16048,
+    "model_rows": 12036,
+    "test_rows": 4012,
+    "overall_positive_rate_pct": 9.65,
+    "model_positive_rate_pct": 9.81,
+    "test_positive_rate_pct": 9.15,
+    "missing_last_pay_date_client_closing_m": 1165,
+    "missing_last_act_closing_m": 31
+  },
+  "development_split": {
+    "train_rows": 7221,
+    "calibration_rows": 2407,
+    "validation_rows": 2408
+  },
+  "champion_challenger": [
+    {
+      "model_name": "xgboost",
+      "roc_auc": 0.7089615132503044,
+      "brier": 0.08318360413104363,
+      "recall": 0.7372881355932204,
+      "precision": 0.15919487648673375,
+      "expected_net_recovery_total": 1555044.16,
+      "expected_roi": 31.0884,
+      "threshold": 0.09
+    },
+    {
+      "model_name": "balanced_random_forest",
+      "roc_auc": 0.7075451821331586,
+      "brier": 0.0841248088113334,
+      "recall": 0.7330508474576272,
+      "precision": 0.1543264942016057,
+      "expected_net_recovery_total": 1460440.18,
+      "expected_roi": 29.1971,
+      "threshold": 0.08
+    }
+  ],
+  "model_selection": {
+    "balanced_random_forest": {
+      "roc_auc_raw": 0.7075451821331586,
+      "roc_auc": 0.7075451821331586,
+      "recall": 0.7330508474576272,
+      "precision": 0.1543264942016057,
+      "brier_raw": 0.18794468091941544,
+      "brier": 0.0841248088113334,
+      "log_loss_raw": 0.5618750405241368,
+      "log_loss": 0.2975360747300652,
+      "threshold": 0.08,
+      "confusion_matrix": {
+        "tn": 1224,
+        "fp": 948,
+        "fn": 63,
+        "tp": 173
+      },
+      "valid_threshold_search": {
+        "threshold": 0.08,
+        "f2": 0.4188861985472155,
+        "recall": 0.7330508474576272,
+        "precision": 0.1543264942016057
+      },
+      "validation_policy": {
+        "accounts": 2408,
+        "expected_gross_recovery_total": 1510460.18,
+        "expected_net_recovery_total": 1460440.18,
+        "contact_cost_total": 50020.0,
+        "expected_roi": 29.1971,
+        "queue_mix": {
+          "Medium Priority (Auto-Dialer)": 1011,
+          "Low Priority (SMS/Email)": 722,
+          "High Priority (Agent Call)": 433,
+          "Write-off / Ignore": 242
+        }
+      }
+    },
+    "xgboost": {
+      "roc_auc_raw": 0.7089615132503044,
+      "roc_auc": 0.7089615132503044,
+      "recall": 0.7372881355932204,
+      "precision": 0.15919487648673375,
+      "brier_raw": 0.17238248315460036,
+      "brier": 0.08318360413104363,
+      "log_loss_raw": 0.5127701854237838,
+      "log_loss": 0.2949947003355855,
+      "threshold": 0.09,
+      "confusion_matrix": {
+        "tn": 1253,
+        "fp": 919,
+        "fn": 62,
+        "tp": 174
+      },
+      "valid_threshold_search": {
+        "threshold": 0.09,
+        "f2": 0.4270986745213549,
+        "recall": 0.7372881355932204,
+        "precision": 0.15919487648673375
+      },
+      "validation_policy": {
+        "accounts": 2408,
+        "expected_gross_recovery_total": 1605064.16,
+        "expected_net_recovery_total": 1555044.16,
+        "contact_cost_total": 50020.0,
+        "expected_roi": 31.0884,
+        "queue_mix": {
+          "Medium Priority (Auto-Dialer)": 1011,
+          "Low Priority (SMS/Email)": 722,
+          "High Priority (Agent Call)": 433,
+          "Write-off / Ignore": 242
+        }
+      }
+    }
+  },
+  "best_model": "xgboost",
+  "test_metrics": {
+    "roc_auc_raw": 0.7357688296834527,
+    "roc_auc": 0.7357688296834527,
+    "recall": 0.8038147138964578,
+    "precision": 0.15526315789473685,
+    "brier_raw": 0.1826557871764804,
+    "brier": 0.07809313160214831,
+    "log_loss_raw": 0.5388624440749684,
+    "log_loss": 0.2780189673521524,
+    "threshold": 0.09,
+    "confusion_matrix": {
+      "tn": 2040,
+      "fp": 1605,
+      "fn": 72,
+      "tp": 295
+    }
+  },
+  "policy_summary": {
+    "accounts": 4012,
+    "expected_gross_recovery_total": 2659159.34,
+    "expected_net_recovery_total": 2575764.84,
+    "contact_cost_total": 83394.5,
+    "expected_roi": 30.8865,
+    "queue_mix": {
+      "Medium Priority (Auto-Dialer)": 1685,
+      "Low Priority (SMS/Email)": 1203,
+      "High Priority (Agent Call)": 722,
+      "Write-off / Ignore": 402
+    }
+  },
+  "queue_summary": [
+    {
+      "recommended_action": "High Priority (Agent Call)",
+      "accounts": 722,
+      "avg_calibrated_prob": 0.15439731608799925,
+      "avg_raw_prob": 0.5320549011230469,
+      "balance_proxy_total": 36587500,
+      "expected_gross_recovery_total": 1464962.3238177304,
+      "expected_net_recovery_total": 1403592.3238177304,
+      "contact_cost_total": 61370.0,
+      "actual_payer_rate": 0.12880886426592797,
+      "expected_roi": 22.870984582332255
+    },
+    {
+      "recommended_action": "Medium Priority (Auto-Dialer)",
+      "accounts": 1685,
+      "avg_calibrated_prob": 0.10758995174593879,
+      "avg_raw_prob": 0.4124325215816498,
+      "balance_proxy_total": 57300000,
+      "expected_gross_recovery_total": 1046327.119003132,
+      "expected_net_recovery_total": 1026107.119003132,
+      "contact_cost_total": 20220.0,
+      "actual_payer_rate": 0.09910979228486647,
+      "expected_roi": 50.74713743833492
+    },
+    {
+      "recommended_action": "Low Priority (SMS/Email)",
+      "accounts": 1203,
+      "avg_calibrated_prob": 0.07873052836521871,
+      "avg_raw_prob": 0.3046720623970032,
+      "balance_proxy_total": 27757500,
+      "expected_gross_recovery_total": 147869.8968611637,
+      "expected_net_recovery_total": 146065.3968611637,
+      "contact_cost_total": 1804.5,
+      "actual_payer_rate": 0.0714879467996675,
+      "expected_roi": 80.94508000064488
+    },
+    {
+      "recommended_action": "Write-off / Ignore",
+      "accounts": 402,
+      "avg_calibrated_prob": 0.05522324246316789,
+      "avg_raw_prob": 0.22619716823101044,
+      "balance_proxy_total": 5145000,
+      "expected_gross_recovery_total": 0.0,
+      "expected_net_recovery_total": 0.0,
+      "contact_cost_total": 0.0,
+      "actual_payer_rate": 0.05223880597014925,
+      "expected_roi": 0.0
+    }
+  ],
+  "top_features": [
+    {
+      "feature": "birth_yr",
+      "importance": 0.1294773550419932
+    },
+    {
+      "feature": "district",
+      "importance": 0.05128080345963075
+    },
+    {
+      "feature": "purchased_bal_gp",
+      "importance": 0.04218178012506395
+    },
+    {
+      "feature": "last_act_closing_m",
+      "importance": 0.023981341317096616
+    },
+    {
+      "feature": "co_closing_m",
+      "importance": 0.02123576397065141
+    },
+    {
+      "feature": "last_pay_date_client_closing_m",
+      "importance": 0.011629756712005123
+    },
+    {
+      "feature": "multiple_acct",
+      "importance": 0.010064027090972228
+    },
+    {
+      "feature": "home_phone_flag",
+      "importance": 0.008529021503085432
+    },
+    {
+      "feature": "mobile_phone_flag",
+      "importance": 0.0035267601843441466
+    },
+    {
+      "feature": "open_closing_m",
+      "importance": 0.0032356667900112603
+    },
+    {
+      "feature": "loan_type",
+      "importance": 0.001440366595276199
+    },
+    {
+      "feature": "missing_last_act_flag",
+      "importance": 0.0
+    }
+  ],
+  "concentration": {
+    "top20_accounts": 802,
+    "overall_actual_payer_rate_pct": 9.15,
+    "prob_top20_actual_payer_rate_pct": 20.7,
+    "prob_top20_actual_payer_capture_share_pct": 45.23,
+    "net_top20_actual_payer_rate_pct": 12.72,
+    "net_top20_actual_payer_capture_share_pct": 27.79,
+    "net_top20_expected_net_recovery_capture_share_pct": 57.35
+  }
+}
