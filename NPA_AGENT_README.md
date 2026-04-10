@@ -33,12 +33,14 @@ configs/
 
 ### 3.2 Champion-Challenger
 - 候选模型至少包括：
+  - Logistic Regression（显式基线模型）
   - Random Forest
   - XGBoost
 - 决策不只看 ROC-AUC，还看：
   - 校准后 Brier
   - Recall(Y)
   - Expected Net Recovery
+- 训练产物会额外输出 Agent Champion vs Baseline 的 T 集对比，避免复杂模型只是在开发集上看起来更强。
 
 ### 3.3 策略优化引擎
 - 在模型分数之上增加经济假设：
@@ -70,6 +72,7 @@ configs/
   - `npa_repayment_model.joblib`
   - `metrics.json`
   - `champion_challenger_summary.csv`
+  - `agent_vs_baseline_summary.csv`
   - `production_queue_summary.csv`
   - `test_scored_accounts.csv`
   - `feature_importance.csv`

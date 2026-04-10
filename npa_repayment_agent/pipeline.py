@@ -59,6 +59,8 @@ ACTION_ORDER = [
     "Low Priority (SMS/Email)",
     "Write-off / Ignore",
 ]
+BASELINE_MODEL_NAME = "baseline_logistic_regression"
+
 
 DEFAULT_PRODUCTION_CONFIG: dict[str, Any] = {
     "calibration": {
@@ -229,6 +231,20 @@ def _build_model_pipelines(y_train: pd.Series) -> dict[str, Pipeline]:
     negative = int(len(y_train) - positive)
     scale_pos_weight = negative / max(positive, 1)
     return {
+        BASELINE_MODEL_NAME: Pipeline(
+            steps=[
+                ("prep", _make_preprocessor()),
+                (
+                    "model",
+                    LogisticRegression(
+                        solver="liblinear",
+                        class_weight="balanced",
+                        max_iter=1000,
+                        random_state=42,
+                    ),
+                ),
+            ]
+        ),
         "balanced_random_forest": Pipeline(
             steps=[
                 ("prep", _make_preprocessor()),
@@ -268,6 +284,15 @@ def _build_model_pipelines(y_train: pd.Series) -> dict[str, Pipeline]:
             ]
         ),
     }
+
+
+def _model_role(model_name: str, champion_name: str | None = None) -> str:
+    if model_name == BASELINE_MODEL_NAME:
+        return "baseline"
+    if champion_name and model_name == champion_name:
+        return "agent_champion"
+    return "challenger"
+
 
 
 def _fit_platt_calibrator(raw_prob: np.ndarray, y_true: pd.Series) -> LogisticRegression:
@@ -567,8 +592,6 @@ def _train_and_score(file_path: str, output_dir: str | None = None, config_path:
 
     champion_rows: list[dict[str, Any]] = []
     candidate_metrics: dict[str, Any] = {}
-    fitted_dev_models: dict[str, Pipeline] = {}
-    fitted_calibrators: dict[str, LogisticRegression] = {}
 
     for name, pipeline in candidate_pipelines.items():
         pipeline.fit(x_train, y_train)
@@ -578,7 +601,7 @@ def _train_and_score(file_path: str, output_dir: str | None = None, config_path:
         calibrated_valid = _apply_platt_calibrator(calibrator, raw_valid)
         threshold_result = _find_best_threshold(y_valid, calibrated_valid)
         valid_metrics = _evaluate_probabilities(y_valid, raw_valid, calibrated_valid, threshold_result["threshold"])
-        valid_scored, valid_queue_summary, valid_policy_totals = _score_frame(
+        _, _, valid_policy_totals = _score_frame(
             frame=model_df.loc[x_valid.index],
             raw_prob=raw_valid,
             calibrated_prob=calibrated_valid,
@@ -588,11 +611,10 @@ def _train_and_score(file_path: str, output_dir: str | None = None, config_path:
         valid_metrics["valid_threshold_search"] = threshold_result
         valid_metrics["validation_policy"] = valid_policy_totals
         candidate_metrics[name] = valid_metrics
-        fitted_dev_models[name] = pipeline
-        fitted_calibrators[name] = calibrator
         champion_rows.append(
             {
                 "model_name": name,
+                "model_role": _model_role(name),
                 "roc_auc": valid_metrics["roc_auc"],
                 "brier": valid_metrics["brier"],
                 "recall": valid_metrics["recall"],
@@ -608,6 +630,7 @@ def _train_and_score(file_path: str, output_dir: str | None = None, config_path:
         ascending=[False, False, False],
     ).reset_index(drop=True)
     best_name = str(champion_df.iloc[0]["model_name"])
+    champion_df["model_role"] = champion_df["model_name"].map(lambda name: _model_role(str(name), best_name))
     best_threshold = float(candidate_metrics[best_name]["threshold"])
 
     final_pipeline = clone(_build_model_pipelines(y_model)[best_name])
@@ -625,6 +648,72 @@ def _train_and_score(file_path: str, output_dir: str | None = None, config_path:
         threshold=best_threshold,
         config=config,
     )
+
+    baseline_threshold = float(candidate_metrics[BASELINE_MODEL_NAME]["threshold"])
+    if best_name == BASELINE_MODEL_NAME:
+        baseline_test_metrics = dict(test_metrics)
+        baseline_policy_totals = dict(policy_totals)
+    else:
+        baseline_pipeline = clone(_build_model_pipelines(y_model)[BASELINE_MODEL_NAME])
+        baseline_pipeline.fit(x_model, y_model)
+        baseline_calibrator = _fit_production_calibrator(baseline_pipeline, x_model, y_model, folds=folds)
+        baseline_raw_test = baseline_pipeline.predict_proba(x_test)[:, 1]
+        baseline_calibrated_test = _apply_platt_calibrator(baseline_calibrator, baseline_raw_test)
+        baseline_test_metrics = _evaluate_probabilities(y_test, baseline_raw_test, baseline_calibrated_test, baseline_threshold)
+        _, _, baseline_policy_totals = _score_frame(
+            frame=test_df,
+            raw_prob=baseline_raw_test,
+            calibrated_prob=baseline_calibrated_test,
+            threshold=baseline_threshold,
+            config=config,
+        )
+
+    holdout_comparison_rows = [
+        {
+            "model_name": best_name,
+            "model_role": _model_role(best_name, best_name),
+            "roc_auc": test_metrics["roc_auc"],
+            "brier": test_metrics["brier"],
+            "log_loss": test_metrics["log_loss"],
+            "recall": test_metrics["recall"],
+            "precision": test_metrics["precision"],
+            "expected_net_recovery_total": policy_totals["expected_net_recovery_total"],
+            "expected_roi": policy_totals["expected_roi"],
+            "threshold": test_metrics["threshold"],
+        }
+    ]
+    if best_name != BASELINE_MODEL_NAME:
+        holdout_comparison_rows.append(
+            {
+                "model_name": BASELINE_MODEL_NAME,
+                "model_role": _model_role(BASELINE_MODEL_NAME, best_name),
+                "roc_auc": baseline_test_metrics["roc_auc"],
+                "brier": baseline_test_metrics["brier"],
+                "log_loss": baseline_test_metrics["log_loss"],
+                "recall": baseline_test_metrics["recall"],
+                "precision": baseline_test_metrics["precision"],
+                "expected_net_recovery_total": baseline_policy_totals["expected_net_recovery_total"],
+                "expected_roi": baseline_policy_totals["expected_roi"],
+                "threshold": baseline_test_metrics["threshold"],
+            }
+        )
+
+    agent_vs_baseline = {
+        "agent_model": best_name,
+        "baseline_model": BASELINE_MODEL_NAME,
+        "agent_matches_baseline": best_name == BASELINE_MODEL_NAME,
+        "holdout_comparison": holdout_comparison_rows,
+        "delta_agent_minus_baseline": {
+            "roc_auc": float(test_metrics["roc_auc"] - baseline_test_metrics["roc_auc"]),
+            "brier": float(test_metrics["brier"] - baseline_test_metrics["brier"]),
+            "log_loss": float(test_metrics["log_loss"] - baseline_test_metrics["log_loss"]),
+            "recall": float(test_metrics["recall"] - baseline_test_metrics["recall"]),
+            "precision": float(test_metrics["precision"] - baseline_test_metrics["precision"]),
+            "expected_net_recovery_total": float(policy_totals["expected_net_recovery_total"] - baseline_policy_totals["expected_net_recovery_total"]),
+            "expected_roi": float(policy_totals["expected_roi"] - baseline_policy_totals["expected_roi"]),
+        },
+    }
+
 
     feature_importance = _feature_importance(final_pipeline, x_test, y_test).head(12)
 
@@ -677,8 +766,12 @@ def _train_and_score(file_path: str, output_dir: str | None = None, config_path:
         "champion_challenger": champion_df.to_dict(orient="records"),
         "model_selection": _to_builtin(candidate_metrics),
         "best_model": best_name,
+        "baseline_model": BASELINE_MODEL_NAME,
         "test_metrics": _to_builtin(test_metrics),
+        "baseline_test_metrics": _to_builtin(baseline_test_metrics),
         "policy_summary": _to_builtin(policy_totals),
+        "baseline_policy_summary": _to_builtin(baseline_policy_totals),
+        "agent_vs_baseline": _to_builtin(agent_vs_baseline),
         "queue_summary": _to_builtin(queue_summary.to_dict(orient="records")),
         "top_features": _to_builtin(feature_importance.to_dict(orient="records")),
         "concentration": {
@@ -691,6 +784,7 @@ def _train_and_score(file_path: str, output_dir: str | None = None, config_path:
             "net_top20_expected_net_recovery_capture_share_pct": round(float(top20_net["expected_net_recovery"].sum() / max(scored_test["expected_net_recovery"].sum(), 1)) * 100, 2),
         },
     }
+
 
     model_bundle = {
         "pipeline": final_pipeline,
@@ -705,11 +799,14 @@ def _train_and_score(file_path: str, output_dir: str | None = None, config_path:
         "metadata": _to_builtin(metrics),
     }
 
+    holdout_comparison_df = pd.DataFrame(agent_vs_baseline["holdout_comparison"])
+
     model_path = out_dir / "npa_repayment_model.joblib"
     metrics_path = out_dir / "metrics.json"
     scored_test_path = out_dir / "test_scored_accounts.csv"
     queue_summary_path = out_dir / "production_queue_summary.csv"
     champion_summary_path = out_dir / "champion_challenger_summary.csv"
+    holdout_comparison_path = out_dir / "agent_vs_baseline_summary.csv"
     feature_importance_path = out_dir / "feature_importance.csv"
     payer_rate_by_balance_path = out_dir / "payer_rate_by_balance.csv"
     payer_rate_by_loan_path = out_dir / "payer_rate_by_loan.csv"
@@ -723,10 +820,12 @@ def _train_and_score(file_path: str, output_dir: str | None = None, config_path:
     scored_test.to_csv(scored_test_path, index=False, encoding="utf-8-sig")
     queue_summary.to_csv(queue_summary_path, index=False, encoding="utf-8-sig")
     champion_df.to_csv(champion_summary_path, index=False, encoding="utf-8-sig")
+    holdout_comparison_df.to_csv(holdout_comparison_path, index=False, encoding="utf-8-sig")
     feature_importance.to_csv(feature_importance_path, index=False, encoding="utf-8-sig")
     payer_rate_by_balance.to_csv(payer_rate_by_balance_path, index=False, encoding="utf-8-sig")
     payer_rate_by_loan.to_csv(payer_rate_by_loan_path, index=False, encoding="utf-8-sig")
     payer_rate_by_mobile.to_csv(payer_rate_by_mobile_path, index=False, encoding="utf-8-sig")
+
 
     report_content = _build_report_markdown(
         metrics=metrics,
@@ -743,12 +842,14 @@ def _train_and_score(file_path: str, output_dir: str | None = None, config_path:
         "metrics_path": str(metrics_path),
         "queue_summary_path": str(queue_summary_path),
         "champion_summary_path": str(champion_summary_path),
+        "holdout_comparison_path": str(holdout_comparison_path),
         "feature_importance_path": str(feature_importance_path),
         "config_used_path": str(config_used_path),
         "scored_test_path": str(scored_test_path),
         "report_path": str(report_path),
         "metrics": _to_builtin(metrics),
     }
+
 
 
 def _build_report_markdown(
@@ -761,16 +862,26 @@ def _build_report_markdown(
 ) -> str:
     m = metrics
     tm = m["test_metrics"]
+    baseline_tm = m["baseline_test_metrics"]
     cm = tm["confusion_matrix"]
     c = m["concentration"]
     config = m["production_config"]
     economics = config["economics"]
+    ab = m["agent_vs_baseline"]
+    delta = ab["delta_agent_minus_baseline"]
+    holdout_comparison = pd.DataFrame(ab["holdout_comparison"])
     report: list[str] = []
     report.append("# NPA回款预测生产版策略报告")
     report.append("")
     report.append("## 1. Executive Summary")
     report.append(f"- 数据量：{m['data_overview']['rows']:,} 条，其中建模集(M) {m['data_overview']['model_rows']:,} 条，独立验证集(T) {m['data_overview']['test_rows']:,} 条。")
     report.append(f"- Champion 模型：**{m['best_model']}**。T集 ROC-AUC = **{tm['roc_auc']:.3f}**，Recall(Y) = **{_safe_pct(tm['recall']):.2f}%**，Precision(Y) = **{_safe_pct(tm['precision']):.2f}%**。")
+    if ab["agent_matches_baseline"]:
+        report.append(f"- 基线结论：**{m['baseline_model']}** 已成为当前 champion，说明更复杂的候选模型暂未在T集上打出更高业务价值。")
+    else:
+        report.append(
+            f"- 对比基线：相对 **{m['baseline_model']}**，当前 Agent 在T集 ROC-AUC 变化 **{delta['roc_auc']:+.3f}**，Brier 变化 **{delta['brier']:+.4f}**（负值更好），预期净回收代理值变化 **{delta['expected_net_recovery_total']:+,.0f}**，ROI 变化 **{delta['expected_roi']:+.2f}x**。"
+        )
     report.append(f"- 概率校准：采用 **Platt scaling**，Brier Score 从 **{tm['brier_raw']:.4f}** 改善到 **{tm['brier']:.4f}**，更适合直接用于产能分配和经济测算。")
     report.append(f"- 生产策略：在默认成本假设下，T集组合的**预期净回收代理值**为 **{m['policy_summary']['expected_net_recovery_total']:,.0f}**，预期ROI为 **{m['policy_summary']['expected_roi']:.2f}x**。")
     report.append(f"- 集中度：按校准后概率排序时，前20%账户覆盖 **{c['prob_top20_actual_payer_capture_share_pct']:.2f}%** 的真实付款账户；按净回收代理值排序时，前20%账户贡献 **{c['net_top20_expected_net_recovery_capture_share_pct']:.2f}%** 的预期净回收。")
@@ -779,6 +890,7 @@ def _build_report_markdown(
     report.append("- 在原有M/T分层建模基础上新增 `train / calibration / validation / holdout` 四层开发框架。")
     report.append("- 在模型评分之后加入概率校准，让分数更接近可执行的回收概率。")
     report.append("- 增加 Champion-Challenger 比较，不只看 AUC，也看校准后经济价值。")
+    report.append("- 本版新增 Logistic Regression 基线模型，便于长期监控 Agent 是否真正跑赢简单可解释方案。")
     report.append("- 增加成本函数与产能约束，把模型输出直接转成坐席、自动外呼、短信三类队列。")
     report.append("- 通过配置文件管理经济假设，便于后续按市场/渠道/回收策略调整。")
     report.append("")
@@ -791,28 +903,43 @@ def _build_report_markdown(
     report.append(f"- Auto-dialer multiplier：{economics['auto_dialer_multiplier']:.2f}x")
     report.append(f"- SMS/Email multiplier：{economics['sms_email_multiplier']:.2f}x")
     report.append("")
-    report.append("## 4. Champion-Challenger Summary")
-    report.append("| Model | Valid ROC-AUC | Valid Brier | Recall(Y) | Precision(Y) | Expected Net Recovery | Expected ROI | Threshold |")
-    report.append("|---|---:|---:|---:|---:|---:|---:|---:|")
+    report.append("## 4. Champion-Challenger Summary (Validation)")
+    report.append("| Role | Model | Valid ROC-AUC | Valid Brier | Recall(Y) | Precision(Y) | Expected Net Recovery | Expected ROI | Threshold |")
+    report.append("|---|---|---:|---:|---:|---:|---:|---:|---:|")
     for row in champion_summary.itertuples(index=False):
         report.append(
-            f"| {row.model_name} | {row.roc_auc:.3f} | {row.brier:.4f} | {_safe_pct(row.recall):.2f}% | {_safe_pct(row.precision):.2f}% | {row.expected_net_recovery_total:,.0f} | {row.expected_roi:.2f}x | {row.threshold:.2f} |"
+            f"| {row.model_role} | {row.model_name} | {row.roc_auc:.3f} | {row.brier:.4f} | {_safe_pct(row.recall):.2f}% | {_safe_pct(row.precision):.2f}% | {row.expected_net_recovery_total:,.0f} | {row.expected_roi:.2f}x | {row.threshold:.2f} |"
         )
     report.append("")
-    report.append("## 5. Holdout Performance (T set)")
+    report.append("## 5. Agent vs Baseline on Holdout (T set)")
+    report.append("| Role | Model | ROC-AUC | Brier | LogLoss | Recall(Y) | Precision(Y) | Expected Net Recovery | Expected ROI | Threshold |")
+    report.append("|---|---|---:|---:|---:|---:|---:|---:|---:|---:|")
+    for row in holdout_comparison.itertuples(index=False):
+        report.append(
+            f"| {row.model_role} | {row.model_name} | {row.roc_auc:.3f} | {row.brier:.4f} | {row.log_loss:.4f} | {_safe_pct(row.recall):.2f}% | {_safe_pct(row.precision):.2f}% | {row.expected_net_recovery_total:,.0f} | {row.expected_roi:.2f}x | {row.threshold:.2f} |"
+        )
+    if ab["agent_matches_baseline"]:
+        report.append("- 当前基线已成为最终champion，因此后续重点不是追求更复杂模型，而是继续提升特征、经济假设和渠道执行质量。")
+    else:
+        report.append(f"- Agent 相对基线的净回收代理值差额：**{delta['expected_net_recovery_total']:+,.0f}**；ROI 差额：**{delta['expected_roi']:+.2f}x**。")
+        report.append(f"- Agent 相对基线的 Recall(Y) 变化：**{delta['recall']:+.2%}**；Precision(Y) 变化：**{delta['precision']:+.2%}**。")
+        report.append(f"- Agent 相对基线的 Brier 变化：**{delta['brier']:+.4f}**（负值更好）；LogLoss 变化：**{delta['log_loss']:+.4f}**（负值更好）。")
+    report.append("")
+    report.append("## 6. Champion Detailed Holdout Metrics")
     report.append(f"- ROC-AUC(raw / calibrated): **{tm['roc_auc_raw']:.3f} / {tm['roc_auc']:.3f}**")
     report.append(f"- Brier(raw / calibrated): **{tm['brier_raw']:.4f} / {tm['brier']:.4f}**")
     report.append(f"- LogLoss(raw / calibrated): **{tm['log_loss_raw']:.4f} / {tm['log_loss']:.4f}**")
     report.append(f"- Recall(Y): **{_safe_pct(tm['recall']):.2f}%**")
     report.append(f"- Precision(Y): **{_safe_pct(tm['precision']):.2f}%**")
     report.append(f"- Confusion Matrix @ threshold {tm['threshold']:.2f}: TN={cm['tn']}, FP={cm['fp']}, FN={cm['fn']}, TP={cm['tp']}")
+    report.append(f"- Baseline 参照：ROC-AUC **{baseline_tm['roc_auc']:.3f}**，Brier **{baseline_tm['brier']:.4f}**，LogLoss **{baseline_tm['log_loss']:.4f}**。")
     report.append("")
-    report.append("## 6. Top Predictive Features")
+    report.append("## 7. Top Predictive Features")
     for row in m["top_features"]:
         feature = row["feature"]
         report.append(f"- **{feature}**（importance={row['importance']:.4f}）：{BUSINESS_MAP.get(feature, '该变量对区分付款人与非付款人具有明显增益。')}")
     report.append("")
-    report.append("## 7. Production Queue Summary")
+    report.append("## 8. Production Queue Summary")
     report.append("| Queue | Accounts | Avg Calibrated PD | Actual Payer Rate | Balance Proxy Total | Expected Gross Recovery | Expected Net Recovery | Contact Cost | ROI |")
     report.append("|---|---:|---:|---:|---:|---:|---:|---:|---:|")
     for row in queue_summary.itertuples(index=False):
@@ -821,14 +948,14 @@ def _build_report_markdown(
             f"| {row.recommended_action} | {int(row.accounts):,} | {_safe_pct(row.avg_calibrated_prob):.2f}% | {_safe_pct(actual_payer_rate):.2f}% | {row.balance_proxy_total:,.0f} | {row.expected_gross_recovery_total:,.0f} | {row.expected_net_recovery_total:,.0f} | {row.contact_cost_total:,.0f} | {row.expected_roi:.2f}x |"
         )
     report.append("")
-    report.append("## 8. Action Recommendation")
+    report.append("## 9. Action Recommendation")
     report.append("- **High Priority (Agent Call)**：优先给人工坐席，关注高校准概率、高余额、净回收最高的账户。")
     report.append("- **Medium Priority (Auto-Dialer)**：给自动外呼，承担规模化覆盖和低成本触达任务。")
     report.append("- **Low Priority (SMS/Email)**：仅保留极低成本数字化触达。")
     report.append("- **Write-off / Ignore**：若净回收为负或挤占产能，则直接放弃当前轮人工资源。")
 
     report.append("")
-    report.append("## 9. Additional Portfolio Signals")
+    report.append("## 10. Additional Portfolio Signals")
     report.append("### Payer Rate by Balance Group")
     report.append("| Balance Group | Payer Rate |")
     report.append("|---|---:|")
@@ -847,11 +974,13 @@ def _build_report_markdown(
     for row in payer_rate_by_mobile.itertuples(index=False):
         report.append(f"| {row.mobile_phone_flag} | {row.payer_rate_pct:.2f}% |")
     report.append("")
-    report.append("## 10. Deployment Notes")
+    report.append("## 11. Deployment Notes")
     report.append("- 本报告中的净回收金额仍是基于余额代理值的运营口径，不是财务确认回款。")
+    report.append("- 后续应持续用基线模型做回归测试：若复杂模型长期跑不赢基线，就该回到特征工程和经济假设，而不是继续堆模型。")
     report.append("- 若要真正投产，应把实际 settlement rate、通话成本、渠道转化率按市场/批次写入 config 后再跑。")
     report.append("- 当前模型文件已包含校准器与默认策略配置，可直接对新组合打分并给出推荐队列。")
     return "\n".join(report)
+
 
 
 def train_repayment_model(file_path: str, output_dir: str | None = None, config_path: str | None = None) -> dict[str, Any]:
@@ -922,11 +1051,16 @@ def build_collection_strategy_report(file_path: str, output_dir: str | None = No
         "metrics_path": result["metrics_path"],
         "queue_summary_path": result["queue_summary_path"],
         "champion_summary_path": result["champion_summary_path"],
+        "holdout_comparison_path": result["holdout_comparison_path"],
         "feature_importance_path": result["feature_importance_path"],
         "config_used_path": result["config_used_path"],
         "scored_test_path": result["scored_test_path"],
         "best_model": result["metrics"]["best_model"],
+        "baseline_model": result["metrics"]["baseline_model"],
         "test_metrics": result["metrics"]["test_metrics"],
+        "baseline_test_metrics": result["metrics"]["baseline_test_metrics"],
         "policy_summary": result["metrics"]["policy_summary"],
+        "agent_vs_baseline": result["metrics"]["agent_vs_baseline"],
     }
+
 

@@ -1,0 +1,13 @@
+﻿feature,importance
+birth_yr,0.1294773550419932
+district,0.05128080345963075
+purchased_bal_gp,0.04218178012506395
+last_act_closing_m,0.023981341317096616
+co_closing_m,0.02123576397065141
+last_pay_date_client_closing_m,0.011629756712005123
+multiple_acct,0.010064027090972228
+home_phone_flag,0.008529021503085432
+mobile_phone_flag,0.0035267601843441466
+open_closing_m,0.0032356667900112603
+loan_type,0.001440366595276199
+missing_last_act_flag,0.0
