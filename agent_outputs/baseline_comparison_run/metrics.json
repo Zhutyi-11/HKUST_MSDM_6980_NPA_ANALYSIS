@@ -41,191 +41,166 @@
   },
   "champion_challenger": [
     {
-      "model_name": "xgboost",
-      "model_role": "agent_champion",
-      "roc_auc": 0.7089615132503044,
-      "brier": 0.08318360413104363,
-      "recall": 0.7372881355932204,
-      "precision": 0.15919487648673375,
-      "expected_net_recovery_total": 1555044.16,
-      "expected_roi": 31.0884,
+      "model_name": "baseline_logistic_regression",
+      "model_role": "baseline",
+      "roc_auc": 0.6994178605986827,
+      "brier": 0.08442013536643628,
+      "log_loss": 0.2986044051976523,
+      "recall": 0.7415254237288136,
+      "precision": 0.15404929577464788,
+      "expected_net_recovery_total": 1467879.62,
+      "expected_roi": 29.3459,
       "threshold": 0.09
+    },
+    {
+      "model_name": "deep_mlp",
+      "model_role": "challenger",
+      "roc_auc": 0.706296625776446,
+      "brier": 0.08694889902450693,
+      "log_loss": 0.3210947938810848,
+      "recall": 0.7457627118644068,
+      "precision": 0.15770609318996415,
+      "expected_net_recovery_total": 1404720.08,
+      "expected_roi": 28.0832,
+      "threshold": 0.05
+    },
+    {
+      "model_name": "xgboost",
+      "model_role": "challenger",
+      "roc_auc": 0.7304522895402191,
+      "brier": 0.09100884413134575,
+      "log_loss": 0.34812256294460464,
+      "recall": 0.6271186440677966,
+      "precision": 0.18339529120198264,
+      "expected_net_recovery_total": 1270095.72,
+      "expected_roi": 25.3918,
+      "threshold": 0.05
     },
     {
       "model_name": "balanced_random_forest",
       "model_role": "challenger",
-      "roc_auc": 0.7075451821331586,
-      "brier": 0.08412480881133338,
-      "recall": 0.7330508474576272,
-      "precision": 0.1543264942016057,
-      "expected_net_recovery_total": 1460440.18,
-      "expected_roi": 29.1971,
-      "threshold": 0.08
-    },
-    {
-      "model_name": "baseline_logistic_regression",
-      "model_role": "baseline",
-      "roc_auc": 0.6781514342791147,
-      "brier": 0.08554491602524172,
-      "recall": 0.9279661016949152,
-      "precision": 0.11973756150902132,
-      "expected_net_recovery_total": 1444961.98,
-      "expected_roi": 28.8877,
-      "threshold": 0.07
+      "roc_auc": 0.7161446140400163,
+      "brier": 0.08551608326406633,
+      "log_loss": 0.30536902665797033,
+      "recall": 0.7542372881355932,
+      "precision": 0.16007194244604317,
+      "expected_net_recovery_total": 1241415.45,
+      "expected_roi": 24.8184,
+      "threshold": 0.05
     }
   ],
   "model_selection": {
     "baseline_logistic_regression": {
-      "roc_auc_raw": 0.6781514342791147,
-      "roc_auc": 0.6781514342791147,
-      "recall": 0.9279661016949152,
-      "precision": 0.11973756150902132,
-      "brier_raw": 0.23118340164690668,
-      "brier": 0.08554491602524172,
-      "log_loss_raw": 0.6513516451362213,
-      "log_loss": 0.30493689107447125,
-      "threshold": 0.07,
+      "roc_auc_raw": 0.6994178605986827,
+      "roc_auc": 0.6994178605986827,
+      "recall": 0.7415254237288136,
+      "precision": 0.15404929577464788,
+      "brier_raw": 0.22497524249842657,
+      "brier": 0.08442013536643628,
+      "log_loss_raw": 0.6397748364618884,
+      "log_loss": 0.2986044051976523,
+      "threshold": 0.09,
       "confusion_matrix": {
-        "tn": 562,
-        "fp": 1610,
-        "fn": 17,
-        "tp": 219
-      },
-      "valid_threshold_search": {
-        "threshold": 0.07,
-        "f2": 0.39487919221060225,
-        "recall": 0.9279661016949152,
-        "precision": 0.11973756150902132
-      },
-      "validation_policy": {
-        "accounts": 2408,
-        "expected_gross_recovery_total": 1494981.98,
-        "expected_net_recovery_total": 1444961.98,
-        "contact_cost_total": 50020.0,
-        "expected_roi": 28.8877,
-        "queue_mix": {
-          "Medium Priority (Auto-Dialer)": 1011,
-          "Low Priority (SMS/Email)": 722,
-          "High Priority (Agent Call)": 433,
-          "Write-off / Ignore": 242
-        }
+        "tn": 1211,
+        "fp": 961,
+        "fn": 61,
+        "tp": 175
       }
     },
     "balanced_random_forest": {
-      "roc_auc_raw": 0.7075451821331586,
-      "roc_auc": 0.7075451821331586,
-      "recall": 0.7330508474576272,
-      "precision": 0.1543264942016057,
-      "brier_raw": 0.18794468091941544,
-      "brier": 0.08412480881133338,
-      "log_loss_raw": 0.5618750405241368,
-      "log_loss": 0.2975360747300652,
-      "threshold": 0.08,
+      "roc_auc_raw": 0.7161446140400163,
+      "roc_auc": 0.7161446140400163,
+      "recall": 0.7542372881355932,
+      "precision": 0.16007194244604317,
+      "brier_raw": 0.18522480503848693,
+      "brier": 0.08551608326406633,
+      "log_loss_raw": 0.5555313468506485,
+      "log_loss": 0.30536902665797033,
+      "threshold": 0.05,
       "confusion_matrix": {
-        "tn": 1224,
-        "fp": 948,
-        "fn": 63,
-        "tp": 173
-      },
-      "valid_threshold_search": {
-        "threshold": 0.08,
-        "f2": 0.4188861985472155,
-        "recall": 0.7330508474576272,
-        "precision": 0.1543264942016057
-      },
-      "validation_policy": {
-        "accounts": 2408,
-        "expected_gross_recovery_total": 1510460.18,
-        "expected_net_recovery_total": 1460440.18,
-        "contact_cost_total": 50020.0,
-        "expected_roi": 29.1971,
-        "queue_mix": {
-          "Medium Priority (Auto-Dialer)": 1011,
-          "Low Priority (SMS/Email)": 722,
-          "High Priority (Agent Call)": 433,
-          "Write-off / Ignore": 242
-        }
+        "tn": 1238,
+        "fp": 934,
+        "fn": 58,
+        "tp": 178
       }
     },
     "xgboost": {
-      "roc_auc_raw": 0.7089615132503044,
-      "roc_auc": 0.7089615132503044,
-      "recall": 0.7372881355932204,
-      "precision": 0.15919487648673375,
-      "brier_raw": 0.17238248315460036,
-      "brier": 0.08318360413104363,
-      "log_loss_raw": 0.5127701854237838,
-      "log_loss": 0.2949947003355855,
-      "threshold": 0.09,
+      "roc_auc_raw": 0.7304522895402191,
+      "roc_auc": 0.7304522895402191,
+      "recall": 0.6271186440677966,
+      "precision": 0.18339529120198264,
+      "brier_raw": 0.17047192293164304,
+      "brier": 0.09100884413134575,
+      "log_loss_raw": 0.5117520817794997,
+      "log_loss": 0.34812256294460464,
+      "threshold": 0.05,
       "confusion_matrix": {
-        "tn": 1253,
-        "fp": 919,
-        "fn": 62,
-        "tp": 174
-      },
-      "valid_threshold_search": {
-        "threshold": 0.09,
-        "f2": 0.4270986745213549,
-        "recall": 0.7372881355932204,
-        "precision": 0.15919487648673375
-      },
-      "validation_policy": {
-        "accounts": 2408,
-        "expected_gross_recovery_total": 1605064.16,
-        "expected_net_recovery_total": 1555044.16,
-        "contact_cost_total": 50020.0,
-        "expected_roi": 31.0884,
-        "queue_mix": {
-          "Medium Priority (Auto-Dialer)": 1011,
-          "Low Priority (SMS/Email)": 722,
-          "High Priority (Agent Call)": 433,
-          "Write-off / Ignore": 242
-        }
+        "tn": 1513,
+        "fp": 659,
+        "fn": 88,
+        "tp": 148
+      }
+    },
+    "deep_mlp": {
+      "roc_auc_raw": 0.706296625776446,
+      "roc_auc": 0.706296625776446,
+      "recall": 0.7457627118644068,
+      "precision": 0.15770609318996415,
+      "brier_raw": 0.08596333102620576,
+      "brier": 0.08694889902450693,
+      "log_loss_raw": 0.30301141690336225,
+      "log_loss": 0.3210947938810848,
+      "threshold": 0.05,
+      "confusion_matrix": {
+        "tn": 1232,
+        "fp": 940,
+        "fn": 60,
+        "tp": 176
       }
     }
   },
-  "best_model": "xgboost",
+  "best_model": "baseline_logistic_regression",
   "baseline_model": "baseline_logistic_regression",
   "test_metrics": {
-    "roc_auc_raw": 0.7357688296834527,
-    "roc_auc": 0.7357688296834527,
-    "recall": 0.8038147138964578,
-    "precision": 0.15526315789473685,
-    "brier_raw": 0.1826557871764804,
-    "brier": 0.07809313160214831,
-    "log_loss_raw": 0.5388624440749684,
-    "log_loss": 0.2780189673521524,
+    "roc_auc_raw": 0.6803377401015912,
+    "roc_auc": 0.6803377401015912,
+    "recall": 0.7329700272479565,
+    "precision": 0.1370351502801834,
+    "brier_raw": 0.22732455132439394,
+    "brier": 0.08031610675508848,
+    "log_loss_raw": 0.645214554837121,
+    "log_loss": 0.28959876047873334,
     "threshold": 0.09,
     "confusion_matrix": {
-      "tn": 2040,
-      "fp": 1605,
-      "fn": 72,
-      "tp": 295
+      "tn": 1951,
+      "fp": 1694,
+      "fn": 98,
+      "tp": 269
     }
   },
   "baseline_test_metrics": {
-    "roc_auc_raw": 0.6494365391731423,
-    "roc_auc": 0.6494365391731423,
-    "recall": 0.8583106267029973,
-    "precision": 0.11229946524064172,
-    "brier_raw": 0.23065373183940668,
-    "brier": 0.0813203656246153,
-    "log_loss_raw": 0.6505622435051897,
-    "log_loss": 0.295197274385935,
-    "threshold": 0.07,
+    "roc_auc_raw": 0.6803377401015912,
+    "roc_auc": 0.6803377401015912,
+    "recall": 0.7329700272479565,
+    "precision": 0.1370351502801834,
+    "brier_raw": 0.22732455132439394,
+    "brier": 0.08031610675508848,
+    "log_loss_raw": 0.645214554837121,
+    "log_loss": 0.28959876047873334,
+    "threshold": 0.09,
     "confusion_matrix": {
-      "tn": 1155,
-      "fp": 2490,
-      "fn": 52,
-      "tp": 315
+      "tn": 1951,
+      "fp": 1694,
+      "fn": 98,
+      "tp": 269
     }
   },
   "policy_summary": {
     "accounts": 4012,
-    "expected_gross_recovery_total": 2659159.34,
-    "expected_net_recovery_total": 2575764.84,
+    "expected_gross_recovery_total": 2351954.77,
+    "expected_net_recovery_total": 2268560.27,
     "contact_cost_total": 83394.5,
-    "expected_roi": 30.8865,
+    "expected_roi": 27.2028,
     "queue_mix": {
       "Medium Priority (Auto-Dialer)": 1685,
       "Low Priority (SMS/Email)": 1203,
@@ -235,10 +210,10 @@
   },
   "baseline_policy_summary": {
     "accounts": 4012,
-    "expected_gross_recovery_total": 2342742.87,
-    "expected_net_recovery_total": 2259348.37,
+    "expected_gross_recovery_total": 2351954.77,
+    "expected_net_recovery_total": 2268560.27,
     "contact_cost_total": 83394.5,
-    "expected_roi": 27.0923,
+    "expected_roi": 27.2028,
     "queue_mix": {
       "Medium Priority (Auto-Dialer)": 1685,
       "Low Priority (SMS/Email)": 1203,
@@ -247,152 +222,635 @@
     }
   },
   "agent_vs_baseline": {
-    "agent_model": "xgboost",
+    "agent_model": "baseline_logistic_regression",
     "baseline_model": "baseline_logistic_regression",
-    "agent_matches_baseline": false,
+    "agent_matches_baseline": true,
     "holdout_comparison": [
-      {
-        "model_name": "xgboost",
-        "model_role": "agent_champion",
-        "roc_auc": 0.7357688296834527,
-        "brier": 0.07809313160214831,
-        "log_loss": 0.2780189673521524,
-        "recall": 0.8038147138964578,
-        "precision": 0.15526315789473685,
-        "expected_net_recovery_total": 2575764.84,
-        "expected_roi": 30.8865,
-        "threshold": 0.09
-      },
       {
         "model_name": "baseline_logistic_regression",
         "model_role": "baseline",
-        "roc_auc": 0.6494365391731423,
-        "brier": 0.0813203656246153,
-        "log_loss": 0.295197274385935,
-        "recall": 0.8583106267029973,
-        "precision": 0.11229946524064172,
-        "expected_net_recovery_total": 2259348.37,
-        "expected_roi": 27.0923,
-        "threshold": 0.07
+        "roc_auc": 0.6803377401015912,
+        "brier": 0.08031610675508848,
+        "log_loss": 0.28959876047873334,
+        "recall": 0.7329700272479565,
+        "precision": 0.1370351502801834,
+        "expected_net_recovery_total": 2268560.27,
+        "expected_roi": 27.2028,
+        "threshold": 0.09
       }
     ],
-    "delta_agent_minus_baseline": {
-      "roc_auc": 0.08633229051031044,
-      "brier": -0.003227234022466982,
-      "log_loss": -0.01717830703378259,
-      "recall": -0.05449591280653954,
-      "precision": 0.04296369265409514,
-      "expected_net_recovery_total": 316416.46999999974,
-      "expected_roi": 3.7942
+    "delta": {
+      "roc_auc": 0.0,
+      "brier": 0.0,
+      "log_loss": 0.0,
+      "recall": 0.0,
+      "precision": 0.0,
+      "expected_net_recovery_total": 0.0,
+      "expected_roi": 0.0
     }
   },
   "queue_summary": [
     {
       "recommended_action": "High Priority (Agent Call)",
       "accounts": 722,
-      "avg_calibrated_prob": 0.15439731608799925,
-      "avg_raw_prob": 0.5320549011230469,
-      "balance_proxy_total": 36587500,
-      "expected_gross_recovery_total": 1464962.3238177304,
-      "expected_net_recovery_total": 1403592.3238177304,
+      "avg_calibrated_prob": 0.10172995486426813,
+      "avg_raw_prob": 0.47228595129261774,
+      "balance_proxy_total": 45265000,
+      "expected_gross_recovery_total": 1146376.231068211,
+      "expected_net_recovery_total": 1085006.231068211,
       "contact_cost_total": 61370.0,
-      "actual_payer_rate": 0.12880886426592797,
-      "expected_roi": 22.870984582332255
+      "actual_payer_rate": 0.08310249307479224,
+      "expected_roi": 17.6797495693044
     },
     {
       "recommended_action": "Medium Priority (Auto-Dialer)",
       "accounts": 1685,
-      "avg_calibrated_prob": 0.10758995174593879,
-      "avg_raw_prob": 0.4124325215816498,
-      "balance_proxy_total": 57300000,
-      "expected_gross_recovery_total": 1046327.119003132,
-      "expected_net_recovery_total": 1026107.119003132,
+      "avg_calibrated_prob": 0.09555001003215897,
+      "avg_raw_prob": 0.46414746586031114,
+      "balance_proxy_total": 56572500,
+      "expected_gross_recovery_total": 1013305.487156559,
+      "expected_net_recovery_total": 993085.487156559,
       "contact_cost_total": 20220.0,
-      "actual_payer_rate": 0.09910979228486647,
-      "expected_roi": 50.74713743833492
+      "actual_payer_rate": 0.09673590504451039,
+      "expected_roi": 49.11402013632834
     },
     {
       "recommended_action": "Low Priority (SMS/Email)",
       "accounts": 1203,
-      "avg_calibrated_prob": 0.07873052836521871,
-      "avg_raw_prob": 0.3046720623970032,
-      "balance_proxy_total": 27757500,
-      "expected_gross_recovery_total": 147869.8968611637,
-      "expected_net_recovery_total": 146065.3968611637,
+      "avg_calibrated_prob": 0.08891027430816473,
+      "avg_raw_prob": 0.4470654307065384,
+      "balance_proxy_total": 23047500,
+      "expected_gross_recovery_total": 192273.05355248065,
+      "expected_net_recovery_total": 190468.55355248065,
       "contact_cost_total": 1804.5,
-      "actual_payer_rate": 0.0714879467996675,
-      "expected_roi": 80.94508000064488
+      "actual_payer_rate": 0.08395677472984206,
+      "expected_roi": 105.55198312689423
     },
     {
       "recommended_action": "Write-off / Ignore",
       "accounts": 402,
-      "avg_calibrated_prob": 0.05522324246316789,
-      "avg_raw_prob": 0.22619716823101044,
-      "balance_proxy_total": 5145000,
+      "avg_calibrated_prob": 0.12180683446282922,
+      "avg_raw_prob": 0.5279042196886079,
+      "balance_proxy_total": 1905000,
       "expected_gross_recovery_total": 0.0,
       "expected_net_recovery_total": 0.0,
       "contact_cost_total": 0.0,
-      "actual_payer_rate": 0.05223880597014925,
+      "actual_payer_rate": 0.10696517412935323,
       "expected_roi": 0.0
     }
   ],
   "top_features": [
     {
+      "feature": "purchased_bal_gp",
+      "importance": 0.08624333284743016
+    },
+    {
       "feature": "birth_yr",
-      "importance": 0.1294773550419932
+      "importance": 0.05716808139252392
     },
     {
       "feature": "district",
-      "importance": 0.05128080345963075
-    },
-    {
-      "feature": "purchased_bal_gp",
-      "importance": 0.04218178012506395
-    },
-    {
-      "feature": "last_act_closing_m",
-      "importance": 0.023981341317096616
-    },
-    {
-      "feature": "co_closing_m",
-      "importance": 0.02123576397065141
-    },
-    {
-      "feature": "last_pay_date_client_closing_m",
-      "importance": 0.011629756712005123
+      "importance": 0.009572143543280953
     },
     {
       "feature": "multiple_acct",
-      "importance": 0.010064027090972228
+      "importance": 0.00721050447965379
     },
     {
       "feature": "home_phone_flag",
-      "importance": 0.008529021503085432
-    },
-    {
-      "feature": "mobile_phone_flag",
-      "importance": 0.0035267601843441466
+      "importance": 0.00217998602093874
     },
     {
       "feature": "open_closing_m",
-      "importance": 0.0032356667900112603
+      "importance": 0.0007888077804315996
     },
     {
       "feature": "loan_type",
-      "importance": 0.001440366595276199
+      "importance": 0.0003601664031576801
+    },
+    {
+      "feature": "co_closing_m",
+      "importance": 0.00010704821281073417
+    },
+    {
+      "feature": "never_paid_to_client_flag",
+      "importance": 5.008540683186791e-05
+    },
+    {
+      "feature": "last_pay_date_client_closing_m",
+      "importance": 2.3024336274946045e-05
     },
     {
       "feature": "missing_last_act_flag",
-      "importance": 0.0
+      "importance": -0.00011272954254075707
+    },
+    {
+      "feature": "last_act_closing_m",
+      "importance": -0.0003969455377265785
     }
   ],
+  "all_feature_importance": {
+    "baseline_logistic_regression": [
+      {
+        "feature": "purchased_bal_gp",
+        "importance": 0.08624333284743016
+      },
+      {
+        "feature": "birth_yr",
+        "importance": 0.05716808139252392
+      },
+      {
+        "feature": "district",
+        "importance": 0.009572143543280953
+      },
+      {
+        "feature": "multiple_acct",
+        "importance": 0.00721050447965379
+      },
+      {
+        "feature": "home_phone_flag",
+        "importance": 0.00217998602093874
+      },
+      {
+        "feature": "open_closing_m",
+        "importance": 0.0007888077804315996
+      },
+      {
+        "feature": "loan_type",
+        "importance": 0.0003601664031576801
+      },
+      {
+        "feature": "co_closing_m",
+        "importance": 0.00010704821281073417
+      },
+      {
+        "feature": "never_paid_to_client_flag",
+        "importance": 5.008540683186791e-05
+      },
+      {
+        "feature": "last_pay_date_client_closing_m",
+        "importance": 2.3024336274946045e-05
+      },
+      {
+        "feature": "missing_last_act_flag",
+        "importance": -0.00011272954254075707
+      },
+      {
+        "feature": "last_act_closing_m",
+        "importance": -0.0003969455377265785
+      },
+      {
+        "feature": "mobile_phone_flag",
+        "importance": -0.00048410909648162194
+      }
+    ],
+    "balanced_random_forest": [
+      {
+        "feature": "birth_yr",
+        "importance": 0.1160794339601485
+      },
+      {
+        "feature": "purchased_bal_gp",
+        "importance": 0.04438852819920545
+      },
+      {
+        "feature": "district",
+        "importance": 0.013651338289546077
+      },
+      {
+        "feature": "multiple_acct",
+        "importance": 0.013073636761193575
+      },
+      {
+        "feature": "last_act_closing_m",
+        "importance": 0.008914753890028914
+      },
+      {
+        "feature": "home_phone_flag",
+        "importance": 0.007961038038745216
+      },
+      {
+        "feature": "co_closing_m",
+        "importance": 0.005553499811245355
+      },
+      {
+        "feature": "mobile_phone_flag",
+        "importance": 0.0047820350373586114
+      },
+      {
+        "feature": "last_pay_date_client_closing_m",
+        "importance": 0.001736842301985142
+      },
+      {
+        "feature": "missing_last_act_flag",
+        "importance": -4.3357516360975625e-06
+      },
+      {
+        "feature": "never_paid_to_client_flag",
+        "importance": -0.00030798787484620505
+      },
+      {
+        "feature": "loan_type",
+        "importance": -0.00041443805294842927
+      },
+      {
+        "feature": "open_closing_m",
+        "importance": -0.0005503414404412821
+      }
+    ],
+    "xgboost": [
+      {
+        "feature": "birth_yr",
+        "importance": 0.1300988626127389
+      },
+      {
+        "feature": "district",
+        "importance": 0.041123707217157676
+      },
+      {
+        "feature": "purchased_bal_gp",
+        "importance": 0.03336562720758911
+      },
+      {
+        "feature": "last_act_closing_m",
+        "importance": 0.029758655617975416
+      },
+      {
+        "feature": "co_closing_m",
+        "importance": 0.01535895164515615
+      },
+      {
+        "feature": "last_pay_date_client_closing_m",
+        "importance": 0.015353419824103076
+      },
+      {
+        "feature": "multiple_acct",
+        "importance": 0.01310443554867824
+      },
+      {
+        "feature": "home_phone_flag",
+        "importance": 0.007410846106980951
+      },
+      {
+        "feature": "open_closing_m",
+        "importance": 0.006594154958268405
+      },
+      {
+        "feature": "mobile_phone_flag",
+        "importance": 0.004249485129493258
+      },
+      {
+        "feature": "missing_last_act_flag",
+        "importance": 0.0
+      },
+      {
+        "feature": "never_paid_to_client_flag",
+        "importance": -6.384020512590904e-05
+      },
+      {
+        "feature": "loan_type",
+        "importance": -0.0010304138026410391
+      }
+    ],
+    "deep_mlp": [
+      {
+        "feature": "multiple_acct",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "loan_type",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "purchased_bal_gp",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "last_act_closing_m",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "open_closing_m",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "co_closing_m",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "last_pay_date_client_closing_m",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "birth_yr",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "district",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "home_phone_flag",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "mobile_phone_flag",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "never_paid_to_client_flag",
+        "importance": 0.07692307692307693
+      },
+      {
+        "feature": "missing_last_act_flag",
+        "importance": 0.07692307692307693
+      }
+    ]
+  },
+  "descriptive_stats": {
+    "last_act_closing_m": {
+      "count": 16048.0,
+      "mean": 39.54717098703888,
+      "std": 19.779844390958747,
+      "min": -1.0,
+      "25%": 31.0,
+      "50%": 35.0,
+      "75%": 39.0,
+      "max": 116.0
+    },
+    "open_closing_m": {
+      "count": 16048.0,
+      "mean": 128.96205134596212,
+      "std": 13.123797298846222,
+      "min": 88.0,
+      "25%": 120.0,
+      "50%": 127.0,
+      "75%": 138.0,
+      "max": 162.0
+    },
+    "co_closing_m": {
+      "count": 16048.0,
+      "mean": 100.19510219341974,
+      "std": 27.75404547554762,
+      "min": 66.0,
+      "25%": 92.0,
+      "50%": 101.0,
+      "75%": 108.0,
+      "max": 1338.0
+    },
+    "last_pay_date_client_closing_m": {
+      "count": 16048.0,
+      "mean": 97.20800099700897,
+      "std": 29.276221289024264,
+      "min": -1.0,
+      "25%": 95.0,
+      "50%": 105.0,
+      "75%": 112.0,
+      "max": 160.0
+    },
+    "birth_yr": {
+      "count": 16048.0,
+      "mean": 1966.8171734795612,
+      "std": 9.784394689871645,
+      "min": 1946.0,
+      "25%": 1959.0,
+      "50%": 1968.0,
+      "75%": 1975.0,
+      "max": 1987.0
+    },
+    "never_paid_to_client_flag": {
+      "count": 16048.0,
+      "mean": 0.07259471585244268,
+      "std": 0.25947816585166156,
+      "min": 0.0,
+      "25%": 0.0,
+      "50%": 0.0,
+      "75%": 0.0,
+      "max": 1.0
+    },
+    "missing_last_act_flag": {
+      "count": 16048.0,
+      "mean": 0.001931704885343968,
+      "std": 0.04391006202444221,
+      "min": 0.0,
+      "25%": 0.0,
+      "50%": 0.0,
+      "75%": 0.0,
+      "max": 1.0
+    },
+    "multiple_acct": {
+      "type": "categorical",
+      "unique": 2,
+      "top_categories": {
+        "Y": 10296,
+        "N": 5752
+      }
+    },
+    "loan_type": {
+      "type": "categorical",
+      "unique": 3,
+      "top_categories": {
+        "Credit Card": 12666,
+        "Personal Loan": 2589,
+        "Overdraft": 793
+      }
+    },
+    "purchased_bal_gp": {
+      "type": "categorical",
+      "unique": 8,
+      "top_categories": {
+        "03. <=25k": 6633,
+        "04. <=50k": 4295,
+        "05. <=100k": 1940,
+        "02. <=10k": 1741,
+        "01. <=5k": 1031,
+        "06. <=200k": 359,
+        "07. 200k+": 45,
+        "00. <=200": 4
+      }
+    },
+    "district": {
+      "type": "categorical",
+      "unique": 127,
+      "top_categories": {
+        "TUEN MUN": 1291,
+        "YUEN LONG": 995,
+        "KWAI CHUNG": 714,
+        "TAI PO": 591,
+        "TIN SHUI WAI": 525,
+        "JORDAN": 504,
+        "SHAM SHUI PO": 489,
+        "TSEUNG KWAN O": 473
+      }
+    },
+    "home_phone_flag": {
+      "type": "categorical",
+      "unique": 2,
+      "top_categories": {
+        "Y": 13316,
+        "N": 2732
+      }
+    },
+    "mobile_phone_flag": {
+      "type": "categorical",
+      "unique": 2,
+      "top_categories": {
+        "Y": 9347,
+        "N": 6701
+      }
+    }
+  },
   "concentration": {
     "top20_accounts": 802,
     "overall_actual_payer_rate_pct": 9.15,
-    "prob_top20_actual_payer_rate_pct": 20.7,
-    "prob_top20_actual_payer_capture_share_pct": 45.23,
-    "net_top20_actual_payer_rate_pct": 12.72,
-    "net_top20_actual_payer_capture_share_pct": 27.79,
-    "net_top20_expected_net_recovery_capture_share_pct": 57.35
+    "prob_top20_actual_payer_rate_pct": 17.83,
+    "prob_top20_capture_share_pct": 38.96,
+    "net_top20_actual_payer_rate_pct": 8.48,
+    "net_top20_capture_share_pct": 18.53,
+    "net_top20_expected_net_recovery_share_pct": 50.61
+  },
+  "payer_rate_by_balance": [
+    {
+      "group": "00. <=200",
+      "payer_rate_pct": 25.0
+    },
+    {
+      "group": "01. <=5k",
+      "payer_rate_pct": 15.52
+    },
+    {
+      "group": "02. <=10k",
+      "payer_rate_pct": 14.07
+    },
+    {
+      "group": "03. <=25k",
+      "payer_rate_pct": 11.29
+    },
+    {
+      "group": "04. <=50k",
+      "payer_rate_pct": 7.15
+    },
+    {
+      "group": "05. <=100k",
+      "payer_rate_pct": 4.07
+    },
+    {
+      "group": "06. <=200k",
+      "payer_rate_pct": 1.95
+    },
+    {
+      "group": "07. 200k+",
+      "payer_rate_pct": 0.0
+    }
+  ],
+  "payer_rate_by_loan": [
+    {
+      "group": "Credit Card",
+      "payer_rate_pct": 9.85
+    },
+    {
+      "group": "Overdraft",
+      "payer_rate_pct": 9.46
+    },
+    {
+      "group": "Personal Loan",
+      "payer_rate_pct": 8.73
+    }
+  ],
+  "payer_rate_by_mobile": [
+    {
+      "group": "N",
+      "payer_rate_pct": 9.15
+    },
+    {
+      "group": "Y",
+      "payer_rate_pct": 10.0
+    }
+  ],
+  "tuning_summary": {
+    "lr": {
+      "best_params": {
+        "C": 0.01,
+        "class_weight": "balanced",
+        "penalty": "l2",
+        "solver": "lbfgs"
+      },
+      "best_val_auc": 0.691186362441882,
+      "total_searched": 20
+    },
+    "rf": {
+      "best_params": {
+        "class_weight": "balanced",
+        "max_depth": 12,
+        "min_samples_leaf": 8,
+        "n_estimators": 500
+      },
+      "best_val_auc": 0.7093263277823402,
+      "total_searched": 72
+    },
+    "xgb": {
+      "best_params": {
+        "colsample_bytree": 0.7,
+        "learning_rate": 0.05,
+        "max_depth": 6,
+        "min_child_weight": 5,
+        "n_estimators": 200,
+        "reg_lambda": 0.5,
+        "subsample": 0.85
+      },
+      "best_val_auc": 0.7192262954248254,
+      "total_searched": 3888
+    },
+    "mlp": {
+      "best_params": {
+        "hidden_dims": [
+          128,
+          64,
+          32
+        ],
+        "epochs": 200,
+        "batch_size": 256,
+        "lr": 0.0003,
+        "weight_decay": 0.0005,
+        "num_residual_blocks": 2,
+        "label_smoothing": 0.03
+      },
+      "best_val_auc": 0.7056996597683929,
+      "total_searched": 8,
+      "all_configs": [
+        {
+          "config": "cfg_1",
+          "auc": 0.7026289914786028
+        },
+        {
+          "config": "cfg_2",
+          "auc": 0.6758981802291102
+        },
+        {
+          "config": "cfg_3",
+          "auc": 0.6827691419296438
+        },
+        {
+          "config": "cfg_4",
+          "auc": 0.685201875955926
+        },
+        {
+          "config": "cfg_5",
+          "auc": 0.4822353840871492
+        },
+        {
+          "config": "cfg_6",
+          "auc": 0.7056996597683929
+        },
+        {
+          "config": "cfg_7",
+          "auc": 0.6987233511252613
+        },
+        {
+          "config": "cfg_8",
+          "auc": 0.6884812872616037
+        }
+      ]
+    }
   }
 }

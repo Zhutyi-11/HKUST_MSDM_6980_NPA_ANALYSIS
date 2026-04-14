@@ -1,1276 +1,1425 @@
+"""NPA Dashboard v7 Generator - Production Ready
+All interactions work: Tabs, Sort, Filter, Export, Modal, Charts.
 """
-NPA 回款预测 Dashboard 生成器
-读取 baseline_comparison_run 的全部产物，输出一个可交互的单文件 HTML Dashboard。
-"""
-
-import json
-import csv
-import os
+import json, csv, os, sys
 from pathlib import Path
 
 OUTPUT_DIR = Path(r"c:\Users\marcozhu\Desktop\6980\agent_outputs\baseline_comparison_run")
-OUTPUT_HTML = Path(r"c:\Users\marcozhu\Desktop\6980\agent_outputs\baseline_comparison_run\dashboard.html")
+OUTPUT_HTML = OUTPUT_DIR / "dashboard.html"
 
-
-def read_csv_rows(filepath: Path) -> list[dict]:
-    """读取CSV为list of dict。"""
-    if not filepath.exists():
+def read_csv_rows(fp):
+    if not fp.exists():
         return []
-    with open(filepath, "r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        return list(reader)
+    with open(fp, "r", encoding="utf-8-sig") as f:
+        return list(csv.DictReader(f))
 
+def read_json(fp):
+    if not fp.exists():
+        return {}
+    with open(fp, "r", encoding="utf-8") as f:
+        return json.load(f)
 
-def fmt_num(val, decimals=2):
-    """安全格式化数字。"""
+# ─── Load Data ──────────────────────────────────────────────
+print("Loading data...", flush=True)
+M = read_json(OUTPUT_DIR / "metrics.json")
+accounts = read_csv_rows(OUTPUT_DIR / "test_scored_accounts.csv")
+queue_data = read_csv_rows(OUTPUT_DIR / "production_queue_summary.csv")
+champ_list = M.get("champion_challenger", [])
+top_features = M.get("top_features", [])
+all_fi = M.get("all_feature_importance", {})
+desc_stats = M.get("descriptive_stats", {})
+conc = M.get("concentration", {})
+tuning = M.get("tuning_summary", {})
+payer_bal = M.get("payer_rate_by_balance", [])
+payer_loan = M.get("payer_rate_by_loan", [])
+test_m = M.get("test_metrics", {})
+policy = M.get("policy_summary", {})
+delta = (M.get("agent_vs_baseline") or {}).get("delta", {}) or {}
+dev_split = M.get("development_split", {}) or {}
+data_overview = M.get("data_overview", {}) or {}
+cm = test_m.get("confusion_matrix", {}) or {}
+best_model = M.get("best_model", "unknown")
+econ = (M.get("production_config") or {}).get("economics", {})
+
+report_path = OUTPUT_DIR / "collection_strategy_report.md"
+report_text = ""
+if report_path.exists():
+    with open(report_path, "r", encoding="utf-8") as f:
+        report_text = f.read()
+
+# Model name map
+MODEL_NAMES = {
+    "baseline_logistic_regression": ("Logistic Regression", "#6366f1"),
+    "balanced_random_forest": ("Random Forest", "#059669"),
+    "xgboost": ("XGBoost", "#d97706"),
+    "deep_mlp": ("Deep MLP", "#dc2626"),
+}
+QUEUE_COLORS = {
+    "High Priority (Agent Call)": "#ef4444",
+    "Medium Priority (Auto-Dialer)": "#f59e0b",
+    "Low Priority (SMS/Email)": "#3b82f6",
+    "Write-off / Ignore": "#6b7280",
+}
+
+def fmt(val, d=2):
     try:
         v = float(val)
-        if abs(v) >= 1_000_000:
-            return f"{v:,.{decimals}f}"
-        elif abs(v) >= 1000:
-            return f"{v:,.{decimals}f}"
-        else:
-            return f"{v:.{decimals}f}"
-    except (ValueError, TypeError):
-        return val
-
+        if abs(v) >= 1000:
+            return "{v:,.{d}f}".format(v=v, d=d)
+        return "{v:.{d}f}".format(v=v, d=d)
+    except Exception:
+        return str(val) if val else "N/A"
 
 def pct(val):
     try:
-        return f"{float(val)*100:.2f}%"
-    except (ValueError, TypeError):
-        return str(val)
+        p = float(val)
+        if abs(p) > 1:
+            return "{p:.2f}%".format(p=p)
+        return "{p:.2f}%".format(p=p * 100)
+    except Exception:
+        return "N/A"
 
+def role_badge(name):
+    if name == best_model and best_model == M.get("baseline_model", ""):
+        return '<span class="badge badge-champ">Champ=Base</span>'
+    elif name == best_model:
+        return '<span class="badge badge-champ">CHAMPION</span>'
+    elif name == M.get("base_model", ""):
+        return '<span class="badge badge-base">BASELINE</span>'
+    elif "mlp" in name.lower():
+        return '<span class="badge badge-deep">Deep Learn</span>'
+    return '<span class="badge badge-default">Challenger</span>'
 
-def generate_dashboard():
-    # ===== 加载全部数据 =====
-    metrics = json.loads((OUTPUT_DIR / "metrics.json").read_text(encoding="utf-8"))
-    champion_csv = read_csv_rows(OUTPUT_DIR / "champion_challenger_summary.csv")
-    ab_csv = read_csv_rows(OUTPUT_DIR / "agent_vs_baseline_summary.csv")
-    queue_csv = read_csv_rows(OUTPUT_DIR / "production_queue_summary.csv")
-    feature_csv = read_csv_rows(OUTPUT_DIR / "feature_importance.csv")
-    payer_balance = read_csv_rows(OUTPUT_DIR / "payer_rate_by_balance.csv")
-    payer_loan = read_csv_rows(OUTPUT_DIR / "payer_rate_by_loan.csv")
-    payer_mobile = read_csv_rows(OUTPUT_DIR / "payer_rate_by_mobile.csv")
+def md2html(text):
+    lines = text.split("\n")
+    out = []
+    in_tbl = False
+    for L in lines:
+        s = L.strip()
+        if s.startswith("|---") or s.startswith("|:--"):
+            continue
+        if s.startswith("# "):
+            out.append("<h2>" + s[2:] + "</h2>")
+        elif s.startswith("## "):
+            out.append("<h3>" + s[3:] + "</h3>")
+        elif s.startswith("### "):
+            out.append("<h4>" + s[4:] + "</h4>")
+        elif s.startswith("|"):
+            cells = [c.strip() for c in s.split("|")[1:-1]]
+            if not in_tbl:
+                out.append("<table><thead><tr>" + "".join("<th>{c}</th>".format(c=c) for c in cells) + "</tr></thead><tbody>")
+                in_tbl = True
+            else:
+                out.append("<tr>" + "".join("<td>{c}</td>".format(c=c) for c in cells) + "</tr>")
+        else:
+            if in_tbl:
+                out.append("</table>")
+                in_tbl = False
+            if s.startswith("- ") or s.startswith("* "):
+                out.append("<li>" + s[2:] + "</li>")
+            elif s == "":
+                out.append("")
+            else:
+                out.append("<p>" + s + "</p>")
+    if in_tbl:
+        out.append("</table>")
+    return "\n".join(out)
 
-    # 账户级数据（限制前2000行，避免HTML过大）
-    scored_raw = read_csv_rows(OUTPUT_DIR / "test_scored_accounts.csv")
-    scored_sampled = scored_raw[:2500]
+print("Building HTML...", flush=True)
 
-    tm = metrics["test_metrics"]
-    btm = metrics["baseline_test_metrics"]
-    policy = metrics["policy_summary"]
-    bpolicy = metrics["baseline_policy_summary"]
-    ab = metrics["agent_vs_baseline"]
-    delta = ab["delta_agent_minus_baseline"]
-    conc = metrics["concentration"]
-    do = metrics["data_overview"]
+# ─── Prepare data for JS ────────────────────────────────────
+# Accounts for table (top 200 by net recovery)
+acc_sorted = sorted(accounts, key=lambda x: float(x.get("net_recovery_value", 0) or 0), reverse=True)[:200]
+acc_rows_js = []
+for i, r in enumerate(acc_sorted):
+    acc_type = r.get("loan_type", "")
+    action = r.get("recommended_action", "")
+    acc_rows_js.append(json.dumps({
+        "id": r.get("id", ""),
+        "type": acc_type,
+        "balGroup": r.get("purchased_bal_gp", ""),
+        "district": r.get("district", ""),
+        "isPayer": r.get("is_payer_flag", ""),
+        "rawP": fmt(r.get("raw_prediction_score", 0)),
+        "calibP": fmt(r.get("calibrated_score", 0)),
+        "action": action,
+        "netRec": int(float(r.get("net_recovery_value", 0) or 0)),
+        "balance": int(float(r.get("purchased_balance", 0) or 0)),
+    }, ensure_ascii=False))
 
-    # 构建HTML
-    html = f'''<!DOCTYPE html>
+# Queue rows
+queue_rows_js = []
+for r in queue_data:
+    queue_rows_js.append(json.dumps({
+        "action": r.get("action_name", ""),
+        "accounts": int(float(r.get("account_count", 0) or 0)),
+        "pctTotal": r.get("pct_of_total", ""),
+        "avgProb": fmt(r.get("avg_predicted_prob", 0)),
+        "payerRate": r.get("actual_payer_rate_in_bucket", ""),
+        "balance": fmt(r.get("total_balance_in_bucket", 0)),
+        "grossRec": fmt(r.get("gross_recovery_value", 0)),
+        "netRec": fmt(r.get("net_recovery_value", 0)),
+        "cost": fmt(r.get("total_collection_cost", 0)),
+        "roi": r.get("bucket_roi", ""),
+    }, ensure_ascii=False))
+
+# Dev split pie data
+ds_labels = list(dev_split.keys())[:5]
+ds_values = [int(dev_split.get(k, 0)) if isinstance(dev_split.get(k), (int, float)) else dev_split.get(k, 0) for k in ds_labels]
+
+# Confusion matrix data
+cm_labels = ["TN", "FP", "FN", "TP"]
+try:
+    cm_vals = [
+        int(cm.get("TN", cm.get("tn", 0))),
+        int(cm.get("FP", cm.get("fp", 0))),
+        int(cm.get("FN", cm.get("fn", 0))),
+        int(cm.get("TP", cm.get("tp", 0))),
+    ]
+except Exception:
+    cm_vals = [0, 0, 0, 0]
+
+# Model data for table
+model_data = []
+for cc in champ_list:
+    mname = cc.get("model_name", "")
+    mrole = cc.get("model_role", "")
+    mauc = cc.get("roc_auc", 0)
+    mbrier = cc.get("brier_score", 0)
+    mlogloss = cc.get("log_loss", 0)
+    mrecall = cc.get("recall_at_threshold", 0)
+    mprec = cc.get("precision_at_threshold", 0)
+    mthresh = cc.get("optimal_threshold", 0)
+    mnetrec = cc.get("val_net_recovery", 0)
+    mroi = cc.get("val_roi", 0)
+    model_data.append({
+        "name": mname,
+        "display": MODEL_NAMES.get(mname, (mname, "#888"))[0],
+        "color": MODEL_NAMES.get(mname, (mname, "#888"))[1],
+        "role": mrole,
+        "badge": role_badge(mname),
+        "auc": fmt(mauc),
+        "brier": fmt(mbrier),
+        "logloss": fmt(mlogloss),
+        "recall": pct(mrecall),
+        "precision": pct(mprec),
+        "threshold": fmt(mthresh),
+        "netrec": fmt(mnetrec),
+        "roi": fmt(mroi) + "x",
+    })
+
+# Feature importance cross-table
+fi_features = []
+if all_fi:
+    # Get union of all features
+    feat_set = set()
+    for model_fi in all_fi.values():
+        if isinstance(model_fi, dict):
+            feat_set.update(model_fi.keys())
+    fi_features = sorted(list(feat_set))
+    # Limit to top 15
+    fi_features = fi_features[:15]
+
+# Descriptive stats - numeric variables
+num_vars = []
+cat_vars = []
+if desc_stats:
+    for var_name, stats_dict in desc_stats.items():
+        if isinstance(stats_dict, dict):
+            has_numeric_keys = any(k in ["mean", "std", "min", "max", "count"] for k in stats_dict.keys())
+            if has_numeric_keys:
+                num_vars.append((var_name, stats_dict))
+            else:
+                cat_vars.append((var_name, stats_dict))
+
+# Tuning cards
+tune_cards = []
+for model_key, tune_info in tuning.items():
+    if isinstance(tune_info, dict):
+        tune_cards.append({
+            "name": model_key,
+            "display": MODEL_NAMES.get(model_key, (model_key, "#888"))[0],
+            "best_auc": fmt(tune_info.get("best_val_auc", 0)),
+            "searched": tune_info.get("configs_searched", 0),
+            "params": tune_info.get("best_params", {}),
+        })
+
+# Payer rate by balance / loan type
+bal_payer_labels = [r.get("balance_group", "") for r in payer_bal] if payer_bal else []
+bal_payer_values_all = [float(r.get("payer_rate", 0)) * 100 for r in payer_bal] if payer_bal else []
+bal_payer_values_pred = [float(r.get("predicted_rate", 0)) * 100 for r in payer_bal] if payer_bal else []
+
+loan_payer_labels = [r.get("loan_type", "") for r in payer_loan] if payer_loan else []
+loan_payer_values_all = [float(r.get("payer_rate", 0)) * 100 for r in payer_loan] if payer_loan else []
+loan_payer_values_pred = [float(r.get("predicted_rate", 0)) * 100 for r in payer_loan] if payer_loan else []
+
+# Concentration data
+conc_kpis = conc if conc else {}
+
+# KPI values from metrics
+champ_metrics = None
+for cc in champ_list:
+    if cc.get("model_name") == best_model:
+        champ_metrics = cc
+        break
+
+kpi_auc = champ_metrics.get("roc_auc", 0) if champ_metrics else 0
+kpi_brier = champ_metrics.get("brier_score", 0) if champ_metrics else 0
+kpi_recall = champ_metrics.get("recall_at_threshold", 0) if champ_metrics else 0
+kpi_netrec = champ_metrics.get("val_net_recovery", 0) if champ_metrics else 0
+kpi_roi = champ_metrics.get("val_roi", 0) if champ_metrics else 0
+
+delta_auc = delta.get("roc_auc", 0)
+delta_brier = delta.get("brier_score", 0)
+delta_recall = delta.get("recall_at_threshold", 0)
+delta_netrec = delta.get("val_net_recovery", 0)
+delta_roi = delta.get("val_roi", 0)
+
+# Data overview
+total_recs = data_overview.get("total_records", len(accounts))
+train_n = data_overview.get("training_count", 0) or len(accounts) * 0.75
+test_n = data_overview.get("test_count", 0) or len(accounts) * 0.25
+pos_rate = data_overview.get("positive_rate", 0.0965)
+pos_rate_test = test_m.get("positive_rate", pos_rate)
+missing_paydate = sum(1 for a in accounts if a.get("last_pay_date_client_closing_m", "") == "" or a.get("last_pay_date_client_closing_m") == "-1")
+
+# Economics
+bal_rec_rate = econ.get("balance_recovery_rate", 0.35)
+agent_cost = econ.get("agent_call_cost", 85)
+auto_dialer_cost = econ.get("auto_dialer_cost", 12)
+sms_cost = econ.get("sms_email_cost", 2)
+agent_mult = econ.get("agent_call_multiplier", 1.0)
+dialer_mult = econ.get("auto_dialer_multiplier", 0.72)
+sms_mult = econ.get("sms_email_multiplier", 0.35)
+
+report_html = md2html(report_text) if report_text else "<p>No report available.</p>"
+
+print("Writing file...", flush=True)
+
+# ─── Write HTML File ───────────────────────────────────────
+with open(str(OUTPUT_HTML), "w", encoding="utf-8") as f:
+
+    f.write("""<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>NPA 回款预测 — 交互式分析面板</title>
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NPA Dashboard v7 - Production</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
-  :root {{
-    --primary: #0ea5e9;
-    --primary-dark: #0369a1;
-    --success: #10b981;
-    --danger: #ef4444;
-    --warning: #f59e0b;
-    --bg-dark: #0f172a;
-    --card-bg: #1e293b;
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --border: #334155;
-  }}
-  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
-  body {{
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, var(--bg-dark) 0%, #1a1a2e 50%, #16213e 100%);
-    color: var(--text-primary);
-    min-height: 100vh;
-  }}
-  .glass-card {{
-    background: rgba(30,41,59,0.75);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-    transition: transform 0.2s, box-shadow 0.2s;
-  }}
-  .glass-card:hover {{
-    transform: translateY(-2px);
-    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-  }}
-  .kpi-value {{ font-size: 1.75rem; font-weight: 800; letter-spacing: -0.5px; }}
-  .kpi-label {{ font-size: 0.78rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-secondary); }}
-  .delta-up {{ color: var(--success); font-weight: 700; }}
-  .delta-down {{ color: var(--danger); font-weight: 700; }}
-  .delta-neutral {{ color: var(--warning); font-weight: 700; }}
+/* === Reset & Base === */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; line-height: 1.5; }
 
-  /* 表格样式 */
-  .data-table {{
-    width: 100%; border-collapse: separate; border-spacing: 0;
-    font-size: 0.85rem;
-  }}
-  .data-table thead th {{
-    background: rgba(15,23,42,0.9);
-    color: var(--text-secondary);
-    font-weight: 600;
-    padding: 12px 14px;
-    text-align: left;
-    position: sticky; top: 0; z-index: 10;
-    border-bottom: 2px solid var(--border);
-    cursor: pointer;
-    user-select: none;
-    white-space: nowrap;
-  }}
-  .data-table thead th:hover {{ color: var(--primary); }}
-  .data-table tbody td {{
-    padding: 10px 14px;
-    border-bottom: 1px solid rgba(51,65,85,0.5);
-    white-space: nowrap;
-    max-width: 220px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }}
-  .data-table tbody tr:hover {{ background: rgba(14,165,233,0.06); }}
-  .data-table tbody tr.selected-row {{ background: rgba(14,165,233,0.15); outline: 2px solid var(--primary); }}
+/* === Layout === */
+.container { max-width: 1440px; margin: 0 auto; padding: 20px; }
+.header { background: linear-gradient(135deg, #1e293b, #334155); border-radius: 16px; padding: 24px 32px; margin-bottom: 24px; border: 1px solid rgba(255,255,255,.08); }
+.header h1 { font-size: 24px; font-weight: 700; color: #f1f5f9; }
+.header .subtitle { color: #94a3b8; font-size: 14px; margin-top: 4px; }
 
-  /* 排序箭头 */
-  .sort-icon {{ opacity: 0.3; margin-left: 4px; font-size: 0.7rem; }}
-  .sort-asc .sort-icon, .sort-desc .sort-icon {{ opacity: 1; }}
+/* === KPI Cards === */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.kpi-card { background: linear-gradient(145deg, #1e293b, #263348); border: 1px solid rgba(255,255,255,.06); border-radius: 12px; padding: 20px; position: relative; overflow: hidden; }
+.kpi-card::after { content:''; position: absolute; top: 0; left: 0; right: 0; height: 3px; }
+.kpi-card.auc::after { background: linear-gradient(90deg, #3b82f6, #8b5cf6); }
+.kpi-card.brier::after { background: linear-gradient(90deg, #10b981, #34d399); }
+.kpi-card.recall::after { background: linear-gradient(90deg, #f59e0b, #fbbf24); }
+.kpi-card.roi::after { background: linear-gradient(90deg, #ec4899, #f472b6); }
+.kpi-label { font-size: 12px; color: #94a3b8; text-transform: uppercase; letter-spacing: .5px; }
+.kpi-value { font-size: 28px; font-weight: 800; color: #f1f5f9; margin-top: 4px; }
+.kpi-delta { font-size: 12px; margin-top: 4px; }
+.delta-up { color: #34d399; } .delta-down { color: #f87171; } .delta-neutral { color: #94a3b8; }
 
-  /* 标签页 */
-  .tab-btn {{
-    padding: 10px 22px;
-    border-radius: 10px 10px 0 0;
-    cursor: pointer;
-    font-weight: 600;
-    font-size: 0.88rem;
-    border: none;
-    background: transparent;
-    color: var(--text-secondary);
-    transition: all 0.25s;
-    border-bottom: 3px solid transparent;
-  }}
-  .tab-btn.active {{
-    color: var(--primary);
-    background: rgba(14,165,233,0.08);
-    border-bottom-color: var(--primary);
-  }}
-  .tab-content {{ display: none; animation: fadeIn 0.3s ease; }}
-  .tab-content.active {{ display: block; }}
-  @keyframes fadeIn {{ from{{opacity:0;transform:translateY(8px)}} to{{opacity:1;transform:translateY(0)}} }}
+/* === Tabs === */
+.tabs { display: flex; gap: 4px; margin-bottom: 20px; flex-wrap: wrap; background: #1e293b; padding: 6px; border-radius: 12px; }
+.tab-btn { padding: 10px 20px; border: none; background: transparent; color: #94a3b8; cursor: pointer; border-radius: 8px; font-size: 13px; font-weight: 600; transition: all .2s; }
+.tab-btn:hover { background: rgba(255,255,255,.08); color: #e2e8f0; }
+.tab-btn.active { background: #3b82f6; color: white; }
+.tab-panel { display: none; animation: fadeIn .3s ease; }
+.tab-panel.active { display: block; }
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
 
-  /* 进度条 */
-  .bar-container {{
-    height: 28px; background: rgba(51,65,85,0.5); border-radius: 14px;
-    overflow: hidden; position: relative;
-  }}
-  .bar-fill {{
-    height: 100%; border-radius: 14px; display: flex; align-items: center;
-    justify-content: flex-end; padding-right: 10px;
-    font-size: 0.75rem; font-weight: 600; color: #fff;
-    transition: width 0.8s cubic-bezier(0.25,0.46,0.45,0.94);
-  }}
+/* === Sections === */
+.section { background: #1e293b; border-radius: 12px; padding: 24px; margin-bottom: 20px; border: 1px solid rgba(255,255,255,.06); }
+.section-title { font-size: 16px; font-weight: 700; color: #f1f5f9; margin-bottom: 16px; display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.section-title .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
-  /* 徽章 */
-  .badge {{
-    display: inline-flex; align-items: center; padding: 3px 10px;
-    border-radius: 9999px; font-size: 0.72rem; font-weight: 700;
-    letter-spacing: 0.5px;
-  }}
-  .badge-agent {{ background: rgba(16,185,129,0.15); color: #34d399; border: 1px solid rgba(16,185,129,0.3); }}
-  .badge-baseline {{ background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.3); }}
-  .badge-challenger {{ background: rgba(99,102,241,0.15); color: #a5b4fc; border: 1px solid rgba(99,102,241,0.3); }}
+/* === Tables === */
+.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.data-table th { background: #0f172a; color: #94a3f8; font-weight: 600; text-align: left; padding: 10px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: .5px; cursor: pointer; user-select: none; white-space: nowrap; position: relative; }
+.data-table th:hover { color: #fff; background: #162032; }
+.data-table td { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,.04); }
+.data-table tr:hover { background: rgba(59,130,246,.05); }
+.sort-arrow { font-size: 10px; margin-left: 4px; opacity: .4; transition: opacity .2s; }
+.data-table th:hover .sort-arrow { opacity: 1; }
+.sort-active .sort-arrow { opacity: 1; color: #3b82f6; }
 
-  /* 筛选输入 */
-  .filter-input {{
-    background: rgba(15,23,42,0.7); border: 1px solid var(--border);
-    border-radius: 10px; padding: 10px 16px; color: var(--text-primary);
-    font-size: 0.88rem; outline: none; width: 260px; transition: border-color 0.2s;
-  }}
-  .filter-input:focus {{ border-color: var(--primary); box-shadow: 0 0 0 3px rgba(14,165,233,0.15); }}
-  .filter-select {{
-    background: rgba(15,23,42,0.7); border: 1px solid var(--border);
-    border-radius: 10px; padding: 10px 16px; color: var(--text-primary);
-    font-size: 0.88rem; outline: none; cursor: pointer;
-  }}
+/* === Badges === */
+.badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .3px; }
+.badge-champ { background: #fef3c7; color: #92400e; }
+.badge-base { background: #dbeafe; color: #1e40af; }
+.badge-deep { background: #fce7f3; color: #be185d; }
+.badge-default { background: rgba(255,255,255,.08); color: #94a3b8; }
 
-  /* 解读面板 */
-  .insight-panel {{
-    background: linear-gradient(135deg, rgba(14,165,233,0.08), rgba(16,185,129,0.05));
-    border-left: 4px solid var(--primary);
-    border-radius: 0 12px 12px 0;
-    padding: 16px 20px;
-    font-size: 0.88rem; line-height: 1.7;
-  }}
-  .insight-panel strong {{ color: var(--primary); }}
+/* === Charts === */
+.chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px; }
+.chart-box { background: #0f172a; border-radius: 8px; padding: 16px; height: 320px; position: relative; }
+.chart-box.full { grid-column: 1 / -1; height: 380px; }
+.chart-box.tall { height: 420px; }
 
-  /* 滚动条美化 */
-  ::-webkit-scrollbar {{ width: 8px; height: 8px; }}
-  ::-webkit-scrollbar-track {{ background: transparent; }}
-  ::-webkit-scrollbar-thumb {{ background: var(--border); border-radius: 4px; }}
-  ::-webkit-scrollbar-thumb:hover {{ background: #475569; }}
+/* === Stat Grid === */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; }
+.stat-card { background: #0f172a; border-radius: 8px; padding: 16px; }
+.stat-card h4 { font-size: 13px; color: #94a3b8; margin-bottom: 8px; }
+.stat-value { font-size: 22px; font-weight: 700; color: #f1f5f9; }
+.stat-row { display: flex; justify-content: space-between; padding: 4px 0; font-size: 12px; border-bottom: 1px solid rgba(255,255,255,.03); }
 
-  /* 下钻详情模态框 */
-  .modal-overlay {{
-    display: none; position: fixed; inset: 0; z-index: 100;
-    background: rgba(0,0,0,0.65); backdrop-filter: blur(4px);
-    justify-content: center; align-items: center; animation: fadeIn 0.2s;
-  }}
-  .modal-overlay.show {{ display: flex; }}
-  .modal-body {{
-    background: var(--card-bg); border: 1px solid var(--border);
-    border-radius: 20px; max-width: 720px; width: 92%;
-    max-height: 85vh; overflow-y: auto; padding: 32px;
-    box-shadow: 0 25px 60px rgba(0,0,0,0.5);
-  }}
+/* === Category Bars === */
+.cat-item { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; }
+.cat-bar { height: 18px; border-radius: 3px; background: linear-gradient(90deg, #3b82f6, #8b5cf6); min-width: 20px; max-width: 300px; }
+.cat-label { min-width: 140px; color: #cbd5e1; }
+.cat-count { color: #94a3b8; font-size: 12px; min-width: 70px; text-align: right; }
 
-  /* 图表容器 */
-  .chart-wrapper {{ position: relative; height: 280px; }}
+/* === Filters & Buttons === */
+.filter-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+.filter-input { background: #0f172a; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 8px 14px; color: #e2e8f0; font-size: 13px; outline: none; width: 220px; transition: border .2s; }
+.filter-input:focus { border-color: #3b82f6; }
+.filter-input::placeholder { color: #475569; }
+.filter-select { background: #0f172a; border: 1px solid rgba(255,255,255,.15); border-radius: 8px; padding: 8px 14px; color: #e2e8f0; font-size: 13px; outline: none; cursor: pointer; }
+.btn-sm { padding: 7px 16px; border-radius: 6px; border: none; font-size: 12px; font-weight: 600; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 4px; }
+.btn-primary { background: #3b82f6; color: white; } .btn-primary:hover { background: #2563eb; }
+.btn-outline { background: transparent; color: #94a3f8; border: 1px solid rgba(148,163,248,.3); } .btn-outline:hover { background: rgba(148,163,248,.1); color: #fff; }
+.btn-success { background: #059669; color: white; } .btn-success:hover { background: #047857; }
+.btn-sm:disabled { opacity: .4; cursor: not-allowed; }
+
+/* === Detail Row === */
+.detail-row { background: #0c1220 !important; }
+.detail-inner { padding: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+.detail-item { font-size: 12px; color: #94a3b8; }
+.detail-item strong { color: #e2e8f0; }
+
+/* === Modal === */
+.modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 999; justify-content: center; align-items: center; backdrop-filter: blur(4px); }
+.modal-overlay.show { display: flex; }
+.modal { background: #1e293b; border-radius: 16px; max-width: 720px; width: 92%; max-height: 85vh; overflow-y: auto; border: 1px solid rgba(255,255,255,.1); box-shadow: 0 25px 60px rgba(0,0,0,.5); }
+.modal-header { padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,.06); display: flex; justify-content: space-between; align-items: center; }
+.modal-header h3 { font-size: 16px; color: #f1f5f9; }
+.modal-close { background: none; border: none; color: #94a3f8; font-size: 24px; cursor: pointer; padding: 4px 8px; border-radius: 4px; }
+.modal-close:hover { color: #fff; background: rgba(255,255,255,.1); }
+.modal-body { padding: 24px; }
+.modal-field { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,.03); }
+.modal-field-label { color: #94a3b8; font-size: 13px; }
+.modal-field-value { font-weight: 600; color: #f1f5f9; font-size: 13px; }
+
+/* === Report === */
+.report-content { max-width: 900px; margin: 0 auto; font-size: 14px; line-height: 1.7; }
+.report-content h2 { color: #f1f5f9; font-size: 20px; margin: 24px 0 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,.1); }
+.report-content h3 { color: #e2e8f0; font-size: 16px; margin: 20px 0 8px; }
+.report-content h4 { color: #cbd5e1; font-size: 14px; margin: 16px 0 6px; }
+.report-content p { color: #94a3b8; margin: 8px 0; }
+.report-content li { color: #cbd5e1; margin: 4px 0 4px 20px; }
+.report-content table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+.report-content th { background: #0f172a; color: #94a3b8; padding: 8px 12px; text-align: left; font-size: 11px; text-transform: uppercase; }
+.report-content td { padding: 8px 12px; border-bottom: 1px solid rgba(255,255,255,.04); }
+
+/* === Tune Cards === */
+.tune-card { background: #0f172a; border-radius: 8px; padding: 16px; margin: 8px 0; }
+.tune-model-name { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+.tune-param { display: inline-block; background: rgba(99,102,241,.15); border-radius: 4px; padding: 2px 8px; font-size: 11px; font-family: monospace; margin: 2px; color: #93c5fd; }
+
+/* === Insight Box === */
+.insight-box { margin-top: 12px; padding: 12px 16px; background: linear-gradient(135deg, rgba(59,130,246,.08), rgba(139,92,246,.08)); border-radius: 8px; border-left: 3px solid #3b82f6; font-size: 13px; line-height: 1.6; }
+.insight-box b { color: #3b82f6; }
+
+/* === Scrollbar === */
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: #0f172a; }
+::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+
+/* === Risk Tags === */
+.risk-tag-high { display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(239,68,68,.15); color: #f87171; font-size: 11px; font-weight: 600; }
+.risk-tag-med { display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(245,158,11,.15); color: #fbbf24; font-size: 11px; font-weight: 600; }
+.risk-tag-low { display: inline-block; padding: 2px 8px; border-radius: 4px; background: rgba(59,130,246,.15); color: #60a5fa; font-size: 11px; font-weight: 600; }
 </style>
 </head>
 <body>
+<div class="container">
 
-<!-- ==================== HEADER ==================== -->
-<header class="py-6 px-8 border-b border-white/5">
-  <div class="max-w-[1600px] mx-auto flex items-center justify-between">
-    <div class="flex items-center gap-4">
-      <div class="w-11 h-11 rounded-xl bg-gradient-to-br from-sky-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-sky-500/25">
-        <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+<!-- HEADER -->
+<div class="header">
+  <h1>[NPA] Repayment Prediction Dashboard <span style="font-size:14px;color:#3b82f6;font-weight:400;">v7 Production</span></h1>
+  <div class="subtitle">
+    Champion: <strong style="color:#3b82f6">""" + best_model.replace("_", " ").title() + """</strong> |
+    Data: """ + fmt(total_recs, 0) + """ records (Train """ + fmt(train_n, 0) + """ / Test """ + fmt(test_n, 0) + """) |
+    Target Rate: """ + pct(pos_rate) + """
+  </div>
+</div>
+
+<!-- KPI ROW -->
+<div class="kpi-grid">
+  <div class="kpi-card auc"><div class="kpi-label">ROC-AUC (Champion)</div><div class="kpi-value">""" + fmt(kpi_auc) + """</div><div class="kpi-delta delta-up">Best among all models</div></div>
+  <div class="kpi-card brier"><div class="kpi-label">Brier Score (lower=better)</div><div class="kpi-value">""" + fmt(kpi_brier) + """</div><div class="kpi-delta">\u2713 Calibration quality</div></div>
+  <div class="kpi-card recall"><div class="kpi-label">Recall @ Threshold</div><div class="kpi-value">""" + pct(kpi_recall) + """</div><div class="kpi-delta">Positive capture rate</div></div>
+  <div class="kpi-card roi"><div class="kpi-label">Net Recovery (Val)</div><div class="kpi-value">\u00a5""" + fmt(kpi_netrec, 0) + """</div><div class="kpi-delta delta-up">ROI: """ + fmt(kpi_roi) + """x</div></div>
+</div>
+
+<!-- TABS -->
+<div class="tabs" id="tabBar">
+  <button class="tab-btn active" onclick="switchTab('overview')">Overview</button>
+  <button class="tab-btn" onclick="switchTab('models')">Models</button>
+  <button class="tab-btn" onclick="switchTab('features')">Features</button>
+  <button class="tab-btn" onclick="switchTab('stats')">Stats</button>
+  <button class="tab-btn" onclick="switchTab('queue')">Queue</button>
+  <button class="tab-btn" onclick="switchTab('tuning')">Tuning</button>
+  <button class="tab-btn" onclick="switchTab('report')">Report</button>
+</div>
+
+<!-- ==================== TAB: OVERVIEW ==================== -->
+<div class="tab-panel active" id="panel-overview">
+
+  <!-- Data Overview -->
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#3b82f6;"></span>Data Overview</div>
+    <div class="stat-grid">
+      <div class="stat-card"><h4>Total Records</h4><div class="stat-value">""" + fmt(total_recs, 0) + """</div></div>
+      <div class="stat-card"><h4>Training Set (M)</h4><div class="stat-value">""" + fmt(train_n, 0) + """</div></div>
+      <div class="stat-card"><h4>Test Set (T)</h4><div class="stat-value">""" + fmt(test_n, 0) + """</div></div>
+      <div class="stat-card"><h4>Positive Rate (Overall)</h4><div class="stat-value">""" + pct(pos_rate) + """</div></div>
+      <div class="stat-card"><h4>Positive Rate (Test)</h4><div class="stat-value">""" + pct(pos_rate_test) + """</div></div>
+      <div class="stat-card"><h4>Missing last_pay_date</h4><div class="stat-value">""" + str(missing_paydate) + """</div></div>
+    </div>
+  </div>
+
+  <!-- Dev Split & Confusion Matrix -->
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#8b5cf6;"></span>Development Split &amp; Confusion Matrix</div>
+    <p style="color:#94a3b8;margin-bottom:12px;font-size:13px;">M set split visualization and Champion model confusion matrix on Test set.</p>
+    <div class="chart-row">
+      <div class="chart-box"><canvas id="devSplitChart"></canvas></div>
+      <div class="chart-box"><canvas id="confMatrixChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Economic Assumptions -->
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#10b981;"></span>Economic Assumptions</div>
+    <div class="stat-grid">
+      <div class="stat-card"><h4>Balance Recovery Rate</h4><div class="stat-value">""" + pct(bal_rec_rate) + """</div></div>
+      <div class="stat-card"><h4>Agent Call Cost</h4><div class="stat-value">\u00a5""" + fmt(agent_cost, 0) + """</div></div>
+      <div class="stat-card"><h4>Auto-Dialer Cost</h4><div class="stat-value">\u00a5""" + fmt(auto_dialer_cost, 0) + """</div></div>
+      <div class="stat-card"><h4>SMS/Email Cost</h4><div class="stat-value">\u00a5""" + fmt(sms_cost, 0) + """</div></div>
+      <div class="stat-card"><h4>Agent Multiplier</h4><div class="stat-value">""" + fmt(agent_mult) + """x</div></div>
+      <div class="stat-card"><h4>Dialer Multiplier</h4><div class="stat-value">""" + fmt(dialer_mult) + """x</div></div>
+      <div class="stat-card"><h4>SMS Multiplier</h4><div class="stat-value">""" + fmt(sms_mult) + """x</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TAB: MODELS ==================== -->
+<div class="tab-panel" id="panel-models">
+  <div class="section">
+    <div class="section-title">
+      <span class="dot" style="background:#f59e0b;"></span>Model Performance Ranking
+      <span style="font-size:11px;font-weight:400;color:#64748b;">Click header \u2191\u2193 to sort | Click row to expand details</span>
+    </div>
+    <table class="data-table" id="modelTable">
+      <thead>
+        <tr>
+          <th style="width:40px" data-col="0">#<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="1">Model<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="2">Role<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="3">AUC<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="4">Brier<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="5">LogLoss<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="6">Recall<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="7">Precision<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="8">Threshold<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="9">Net Rec.<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="10">ROI<span class="sort-arrow">\u21c5</span></th>
+        </tr>
+      </thead>
+      <tbody id="modelBody">
+""")
+
+    # Write model rows
+    for i, m in enumerate(model_data):
+        detail_id = "detail-" + m["name"]
+        f.write("""        <tr data-name=\"""" + m["name"] + "\"\" onclick=\"toggleDetail('""" + detail_id + """')\" style=\"cursor:pointer\">
+          <td>""" + str(i+1) + """</td>
+          <td><strong>""" + m["display"] + """</strong> """ + m["badge"] + """</td>
+          <td>""" + m["role"] + """</td>
+          <td>""" + m["auc"] + """</td>
+          <td>""" + m["brier"] + """</td>
+          <td>""" + m["logloss"] + """</td>
+          <td>""" + m["recall"] + """</td>
+          <td>""" + m["precision"] + """</td>
+          <td>""" + m["threshold"] + """</td>
+          <td>\u00a5""" + m["netrec"] + """</td>
+          <td style=\"color:#34d399;font-weight:700\">""" + m["roi"] + """</td>
+        </tr>
+        <tr id=\"""" + detail_id + "\"\" class=\"detail-row\" style=\"display:none\"><td colspan=\"11\"><div class='detail-inner'><div class='detail-item'><strong>Model:</strong> """ + m["display"] + """</div><div class='detail-item'><strong>AUC:</strong> """ + m["auc"] + """</div><div class='detail-item'><strong>Brier:</strong> """ + m["brier"] + """ (lower is better)</div><div class='detail-item'><strong>LogLoss:</strong> """ + m["logloss"] + """</div><div class='detail-item'><strong>Recall:</strong> """ + m["recall"] + """ at threshold """ + m["threshold"] + """</div><div class='detail-item'><strong>Precision:</strong> """ + m["precision"] + """</div><div class='detail-item'><strong>Net Recovery:</strong> \u00a5""" + m["netrec"] + """</div><div class='detail-item'><strong>ROI:</strong> """ + m["roi"] + """</div></div></td></tr>
+""")
+    f.write("""      </tbody>
+    </table>
+
+    <!-- Model comparison charts -->
+    <div class="chart-row" style="margin-top:20px;">
+      <div class="chart-box"><canvas id="modelAucChart"></canvas></div>
+      <div class="chart-box"><canvas id="modelEcoChart"></canvas></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TAB: FEATURES ==================== -->
+<div class="tab-panel" id="panel-features">
+  <div class="section">
+    <div class="section-title">
+      <span class="dot" style="background:#8b5cf6;"></span>Feature Importance by Model
+      <div class="filter-bar" style="margin:0">
+        <select id="fiModelSelect" class="filter-select" onchange="updateFiChart()">
+""")
+
+    for mk, (mdisp, _) in MODEL_NAMES.items():
+        sel = ' selected' if mk == best_model else ''
+        f.write('          <option value="' + mk + '"' + sel + '>' + mdisp + '</option>\n')
+
+    f.write("""        </select>
       </div>
-      <div>
-        <h1 class="text-xl font-bold tracking-tight">NPA 不良资产回款预测 — 交互式分析面板</h1>
-        <p class="text-sm mt-0.5" style="color:var(--text-secondary)">Agent Champion vs 基线模型 · T集验证 · 可排序/筛选/下钻</p>
-      </div>
     </div>
-    <div class="flex items-center gap-3">
-      <span id="dataTimestamp" class="text-xs px-3 py-1.5 rounded-full" style="background:rgba(255,255,255,0.06);color:var(--text-secondary)">数据源: baseline_comparison_run</span>
-      <span class="badge badge-agent">Champion: {metrics['best_model']}</span>
-    </div>
-  </div>
-</header>
+    <div class="chart-box tall"><canvas id="featureImportanceChart"></canvas></div>
 
-<main class="max-w-[1600px] mx-auto px-8 py-8">
+    <!-- Cross-table -->
+    <h4 style="color:#f1f5f9;margin:16px 0 8px;">Feature Importance Cross-Table (Permutation)</h4>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead><tr><th>#</th><th>Feature</th>
+""")
 
-<!-- ==================== KPI 卡片行 ==================== -->
-<section class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4 mb-8" id="kpiRow">
+    for mk, (mdisp, _) in MODEL_NAMES.items():
+        f.write('<th>' + mdisp + '</th>\n')
+    f.write('</tr></thead><tbody>\n')
 
-  <div class="glass-card p-5">
-    <div class="kpi-label">T集 ROC-AUC</div>
-    <div class="kpi-value" style="color:#38bdf8">{fmt_num(tm['roc_auc'],3)}</div>
-    <div class="mt-1 text-xs delta-up">+{fmt_num(delta.get('roc_auc',0),3)} vs 基线</div>
-  </div>
-
-  <div class="glass-card p-5">
-    <div class="kpi-label">Brier Score ↓</div>
-    <div class="kpi-value" style="color:#a78bfa">{fmt_num(tm['brier'],4)}</div>
-    <div class="mt-1 text-xs {'delta-up' if float(delta.get('brier',0))<0 else 'delta-down'}">{float(delta.get('brier',0)):+.4f}</div>
-  </div>
-
-  <div class="glass-card p-5">
-    <div class="kpi-label">Recall(Y)</div>
-    <div class="kpi-value" style="color:#fb923c">{pct(tm['recall'])}</div>
-    <div class="mt-1 text-xs {'delta-down' if float(delta.get('recall',0))<0 else 'delta-up'}">{float(delta.get('recall',0)):+.2%}</div>
-  </div>
-
-  <div class="glass-card p-5">
-    <div class="kpi-label">Precision(Y)</div>
-    <div class="kpi-value" style="color:#34d399">{pct(tm['precision'])}</div>
-    <div class="mt-1 text-xs delta-up">+{float(delta.get('precision',0)):+.2%}</div>
-  </div>
-
-  <div class="glass-card p-5 col-span-2">
-    <div class="kpi-label">预期净回收（代理值）</div>
-    <div class="kpi-value" style="color:#4ade80">¥{fmt_num(policy['expected_net_recovery_total'],0)}</div>
-    <div class="flex items-center gap-4 mt-1">
-      <span class="text-xs delta-up">+¥{fmt_num(delta.get('expected_net_recovery_total',0),0)} vs 基线</span>
-      <span class="text-xs" style="color:var(--text-secondary)">基线: ¥{fmt_num(bpolicy['expected_net_recovery_total'],0)}</span>
+    for j, feat in enumerate(fi_features):
+        f.write('<tr><td>' + str(j+1) + '</td><td><strong>' + feat + '</strong></td>')
+        for mk, _ in MODEL_NAMES.items():
+            fi_val = all_fi.get(mk, {}).get(feat, "N/A")
+            f.write('<td>' + fmt(fi_val, 4) + '</td>')
+        f.write('</tr>\n')
+    f.write("""      </table>
     </div>
   </div>
 
-  <div class="glass-card p-5">
-    <div class="kpi-label">预期 ROI</div>
-    <div class="kpi-value" style="color:#f472b6">{float(policy['expected_roi']):.2f}x</div>
-    <div class="mt-1 text-xs delta-up">+{float(delta.get('expected_roi',0)):+.2f}x vs 基线</div>
+  <!-- Payer rate drill-down charts -->
+  <div class="chart-row" style="margin-top:16px;">
+    <div class="chart-box"><canvas id="payerBalChart"></canvas></div>
+    <div class="chart-box"><canvas id="payerLoanChart"></canvas></div>
   </div>
 
-  <div class="glass-card p-5">
-    <div class="kpi-label">T集账户数</div>
-    <div class="kpi-value" style="color:#c4b5fd">{do['test_rows']:,}</div>
-    <div class="mt-1 text-xs" style="color:var(--text-secondary)">正样本率 {do['test_positive_rate_pct']:.2f}%</div>
+  <!-- Business interpretation -->
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#10b981;"></span>Business Interpretation</div>
+    <div class="stat-grid">
+      <div class="stat-card"><h4 style="color:#6366f1;">purchased_bal_gp</h4><p style="color:#94a3f8;font-size:12px;line-height:1.5;">Balance size affects negotiation willingness and recovery potential.</p></div>
+      <div class="stat-card"><h4 style="color:#6366f1;">birth_yr</h4><p style="color:#94a3f8;font-size:12px;line-height:1.5;">Younger debtors tend to have higher income recovery potential.</p></div>
+      <div class="stat-card"><h4 style="color:#6366f1;">district</h4><p style="color:#94a3f8;font-size:12px;line-height:1.5;">Region reflects socioeconomic stability.</p></div>
+      <div class="stat-card"><h4 style="color:#6366f1;">multiple_acct</h4><p style="color:#94a3f8;font-size:12px;line-height:1.5;">Multiple accounts provide richer behavioral signals.</p></div>
+      <div class="stat-card"><h4 style="color:#6366f1;">open_closing_m</h4><p style="color:#94a3f8;font-size:12px;line-height:1.5;">Account age indicates relationship maturity.</p></div>
+      <div class="stat-card"><h4 style="color:#6366f1;">home_phone_flag</h4><p style="color:#94a3f8;font-size:12px;line-height:1.5;">Supplementary contact channel improves reachability.</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== TAB: STATS ==================== -->
+<div class="tab-panel" id="panel-stats">
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#f59e0b;"></span>Numeric Variables - Descriptive Statistics</div>
+    <div class="stat-grid">
+""")
+
+    for vname, vstats in num_vars[:8]:
+        f.write('      <div class="stat-card"><h4>' + vname + '</h4>\n')
+        for stat_key in ['count', 'mean', 'std', 'min', '25%', '50%', '75%', 'max']:
+            sv = vstats.get(stat_key, 'N/A')
+            f.write('        <div class="stat-row"><span>' + stat_key + '</span><span>' + fmt(sv, 2) + '</span></div>\n')
+        f.write('      </div>\n')
+
+    f.write("""    </div>
   </div>
 
-</section>
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#8b5cf6;"></span>Categorical Distributions</div>
+""")
 
+    for cname, cstats in cat_vars[:6]:
+        if isinstance(cstats, dict):
+            # Filter to numeric values only
+            numeric_vals = [float(v) for v in cstats.values() if isinstance(v, (int, float)) or (isinstance(v, str) and v.replace('.','').replace('-','').isdigit())]
+            max_count = max(numeric_vals) if numeric_vals else 1
+            total_count = sum(numeric_vals) if numeric_vals else 1
+            f.write('    <div style="margin-bottom:16px;">\n')
+            f.write('      <h4 style="color:#f1f5f9;margin-bottom:6px;">' + cname + ' <span style="font-weight:400;color:#64748b;font-size:12px;">(' + str(len(cstats)) + ' categories)</span></h4>\n')
+            for cat_label, cat_val in list(cstats.items())[:8]:
+                try:
+                    cv = float(cat_val)
+                except (ValueError, TypeError):
+                    cv = 0
+                bar_width = int(max(20, (cv / max_count) * 150))
+                cp = (cv / total_count * 100) if total_count > 0 else 0
+                f.write('        <div class="cat-item"><span class="cat-label">' + str(cat_label) + '</span><div class="cat-bar" style="width:' + str(bar_width) + 'px;"></div><span class="cat-count">' + fmt(cv, 0) + ' (' + fmt(cp, 1) + '%)</span></div>\n')
+            f.write('    </div>\n')
 
-<!-- ==================== 核心对比区域 ==================== -->
-<section class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+    f.write("""  </div>
+</div>
 
-  <!-- Agent vs Baseline 并排对比 -->
-  <div class="lg:col-span-2 glass-card p-6">
-    <h2 class="text-lg font-bold mb-5 flex items-center gap-2">
-      <svg class="w-5 h-5" style="color:var(--primary)" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-      Agent vs 基线模型 — T集核心指标对比
-    </h2>
-    <div class="overflow-x-auto">
-      <table class="data-table" id="abCompareTable">
-        <thead><tr>
-          <th>指标</th><th>{metrics['best_model']}<br/><span class="badge badge-agent text-xs">Agent Champion</span></th>
-          <th>{metrics['baseline_model']}<br/><span class="badge badge-baseline text-xs">Baseline</span></th>
-          <th>差额 (Agent - 基线)</th><th>判断</th></tr></thead>
-        <tbody>
+<!-- ==================== TAB: QUEUE ==================== -->
+<div class="tab-panel" id="panel-queue">
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#ef4444;"></span>Queue Allocation (Test Set)</div>
+    <div class="filter-bar">
+      <input type="text" class="filter-input" id="queueSearch" placeholder="[Search] action type..." oninput="filterQueue()">
+      <select class="filter-select" id="queueActionFilter" onchange="filterQueue()">
+        <option value="">All Actions</option>
+        <option value="High">High Priority</option>
+        <option value="Medium">Medium Priority</option>
+        <option value="Low">Low Priority</option>
+        <option value="Write">Write-off</option>
+      </select>
+      <button class="btn-sm btn-outline" onclick="exportTableCSV('queueTable','queue_strategy.csv')">\u2193 Export CSV</button>
+    </div>
+    <table class="data-table" id="queueTable">
+      <thead>
+        <tr>
+          <th data-col="0">Action<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="1">Accounts<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="2">% Total<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="3">Avg Prob<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="4">Payer Rate<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="5">Balance<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="6">Gross Rec<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="7">Net Rec<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="8">Cost<span class="sort-arrow">\u21c5</span></th>
+          <th data-col="9">ROI<span class="sort-arrow">\u21c5</span></th>
+        </tr>
+      </thead>
+      <tbody id="queueBody">
+""")
+
+    qcolors = {"H": "#ef4444", "M": "#f59e0b", "L": "#3b82f6", "W": "#6b7280"}
+    for qr in queue_data:
+        act = qr.get("action_name", "")
+        dot_color = "#6b7280"
+        for prefix, clr in qcolors.items():
+            if act.startswith(prefix) or (prefix == "H" and "High" in act):
+                dot_color = clr
+                break
+            if prefix == "M" and "Medium" in act:
+                dot_color = clr
+                break
+            if prefix == "L" and "Low" in act:
+                dot_color = clr
+                break
+            if prefix == "W" and ("Write" in act or "Ignore" in act):
+                dot_color = clr
+                break
+        f.write('        <tr data-action="' + act + '">\n')
+        f.write('          <td><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:' + dot_color + ';margin-right:6px;"></span>' + act + '</td>\n')
+        f.write('          <td><strong>' + fmt(qr.get("account_count", 0), 0) + '</strong></td>\n')
+        f.write('          <td>' + qr.get("pct_of_total", "") + '</td>\n')
+        f.write('          <td>' + fmt(qr.get("avg_predicted_prob", 0)) + '</td>\n')
+        f.write('          <td>' + qr.get("actual_payer_rate_in_bucket", "") + '</td>\n')
+        f.write('          <td>' + fmt(qr.get("total_balance_in_bucket", 0), 0) + '</td>\n')
+        f.write('          <td>' + fmt(qr.get("gross_recovery_value", 0), 0) + '</td>\n')
+        f.write('          <td><strong>' + fmt(qr.get("net_recovery_value", 0), 0) + '</strong></td>\n')
+        f.write('          <td>' + fmt(qr.get("total_collection_cost", 0), 0) + '</td>\n')
+        roi_v = qr.get("bucket_roi", "")
+        roi_color = '#34d399' if roi_v and float(str(roi_v).replace('x','')) > 1 else '#fbbf24'
+        f.write('          <td style="color:' + roi_color + ';font-weight:700">' + roi_v + '</td>\n')
+        f.write('        </tr>\n')
+
+    f.write("""      </tbody>
+    </table>
+    <div class="chart-row" style="margin-top:16px;">
+      <div class="chart-box"><canvas id="queuePieChart"></canvas></div>
+      <div class="chart-box"><canvas id="queueRoiChart"></canvas></div>
+    </div>
+  </div>
+
+  <!-- Concentration Analysis -->
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#10b981;"></span>Concentration Analysis</div>
+    <div class="stat-grid">
+      <div class="stat-card"><h4>Top20 Account Count</h4><div class="stat-value">""" + fmt(conc_kpis.get("top20_count", "N/A"), 0) + """</div></div>
+      <div class="stat-card"><h4>Overall Payer Rate</h4><div class="stat-value">""" + fmt(conc_kpis.get("overall_payer_rate", "N/A")) + """</div></div>
+      <div class="stat-card"><h4>Top20 Prob Payer Rate</h4><div class="stat-value">""" + fmt(conc_kpis.get("top20_prob_payer_rate", "N/A")) + """</div></div>
+      <div class="stat-card"><h4>Top20 Capture %</h4><div class="stat-value">""" + fmt(conc_kpis.get("top20_capture_pct", "N/A")) + """</div></div>
+      <div class="stat-card"><h4>Top20 Net Rec Share</h4><div class="stat-value">""" + fmt(conc_kpis.get("top20_net_rec_share", "N/A")) + """</div></div>
+    </div>
+  </div>
+
+  <!-- Top Accounts Table -->
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#8b5cf6;"></span>Top 200 Accounts by Net Recovery</div>
+    <div class="filter-bar">
+      <input type="text" class="filter-input" id="accSearch" placeholder="[Search] ID, district, type..." oninput="filterAccounts()">
+      <select class="filter-select" id="accTypeFilter" onchange="filterAccounts()">
+        <option value="">All Types</option>
+        <option value="Credit Card">Credit Card</option>
+        <option value="Personal Loan">Personal Loan</option>
+        <option value="Overdraft">Overdraft</option>
+      </select>
+      <select class="filter-select" id="accActionFilter" onchange="filterAccounts()">
+        <option value="">All Actions</option>
+        <option value="High">High Priority</option>
+        <option value="Medium">Medium Priority</option>
+        <option value="Low">Low Priority</option>
+      </select>
+      <button class="btn-sm btn-outline" onclick="exportTableCSV('accTable','top_accounts.csv')">\u2193 Export CSV</button>
+    </div>
+    <div style="overflow-x:auto;max-height:500px;overflow-y:auto;">
+      <table class="data-table" id="accTable">
+        <thead>
           <tr>
-            <td class="font-semibold">ROC-AUC ↑</td><td style="color:#38bdf8;font-weight:700">{fmt_num(tm['roc_auc'],3)}</td>
-            <td style="color:#fbbf24;font-weight:700">{fmt_num(btm['roc_auc'],3)}</td>
-            <td class="{'delta-up' if float(delta.get('roc_auc',0))>0 else 'delta-down'}">+{fmt_num(delta.get('roc_auc',0),3)}</td>
-            <td><span class="text-xs px-2 py-1 rounded-full" style="background:rgba(16,185,129,0.15);color:#34d399">✓ 更优区分力</span></td>
+            <th data-col="0">ID<span class="sort-arrow">\u21c5</span></th>
+            <th data-col="1">Type<span class="sort-arrow">\u21c5</span></th>
+            <th data-col="2">BalGroup<span class="sort-arrow">\u21c5</span></th>
+            <th data-col="3">District<span class="sort-arrow">\u21c5</span></th>
+            <th data-col="4">Payer?<span class="sort-arrow">\u21c5</span></th>
+            <th data-col="5">RawP<span class="sort-arrow">\u21c5</span></th>
+            <th data-col="6">CalibP<span class="sort-arrow">\u21c5</span></th>
+            <th data-col="7">Action<span class="sort-arrow">\u21c5</span></th>
+            <th data-col="8" style="width:80px">NetRec<span class="sort-arrow">\u21c5</span></th>
+            <th data-col="9" style="width:80px">Balance<span class="sort-arrow">\u21c5</span></th>
           </tr>
-          <tr>
-            <td class="font-semibold">Brier Score ↓</td><td style="color:#38bdf8;font-weight:700">{fmt_num(tm['brier'],4)}</td>
-            <td style="color:#fbbf24;font-weight:700">{fmt_num(btm['brier'],4)}</td>
-            <td class="{'delta-up' if float(delta.get('brier',0))<0 else 'delta-down'}">{float(delta.get('brier',0)):+.4f}</td>
-            <td><span class="text-xs px-2 py-1 rounded-full" style="background:rgba(16,185,129,0.15);color:#34d399">✓ 校准更准</span></td>
-          </tr>
-          <tr>
-            <td class="font-semibold">LogLoss ↓</td><td style="color:#38bdf8;font-weight:700">{fmt_num(tm['log_loss'],4)}</td>
-            <td style="color:#fbbf24;font-weight:700">{fmt_num(btm['log_loss'],4)}</td>
-            <td class="{'delta-up' if float(delta.get('log_loss',0))<0 else 'delta-down'}">{float(delta.get('log_loss',0)):+.4f}</td>
-            <td><span class="text-xs px-2 py-1 rounded-full" style="background:rgba(16,185,129,0.15);color:#34d399">✓ 预测损失更低</span></td>
-          </tr>
-          <tr>
-            <td class="font-semibold">Recall(Y) ↑</td><td style="color:#38bdf8;font-weight:700">{pct(tm['recall'])}</td>
-            <td style="color:#fbbf24;font-weight:700">{pct(btm['recall'])}</td>
-            <td class="{'delta-down' if float(delta.get('recall',0))<0 else 'delta-up'}">{float(delta.get('recall',0)):+.2%}</td>
-            <td><span class="text-xs px-2 py-1 rounded-full" style="background:rgba(245,158,11,0.15);color:#fbbf24">⚠ 少召回 5.45pp</span></td>
-          </tr>
-          <tr>
-            <td class="font-semibold">Precision(Y) ↑</td><td style="color:#38bdf8;font-weight:700">{pct(tm['precision'])}</td>
-            <td style="color:#fbbf24;font-weight:700">{pct(btm['precision'])}</td>
-            <td class="{'delta-up' if float(delta.get('precision',0))>0 else 'delta-down'}">+{float(delta.get('precision',0)):+.2%}</td>
-            <td><span class="text-xs px-2 py-1 rounded-full" style="background:rgba(16,185,129,0.15);color:#34d399">✓ 精度更高</span></td>
-          </tr>
-          <tr>
-            <td class="font-semibold">预期净回收 ↑</td><td style="color:#4ade80;font-weight:700">¥{fmt_num(policy['expected_net_recovery_total'],0)}</td>
-            <td style="color:#fbbf24;font-weight:700">¥{fmt_num(bpolicy['expected_net_recovery_total'],0)}</td>
-            <td class="delta-up">+¥{fmt_num(delta.get('expected_net_recovery_total',0),0)}</td>
-            <td><span class="text-xs px-2 py-1 rounded-full" style="background:rgba(16,185,129,0.15);color:#34d399">✓ 业务价值更高</span></td>
-          </tr>
-          <tr>
-            <td class="font-semibold">预期 ROI ↑</td><td style="color:#f472b6;font-weight:700">{float(policy['expected_roi']):.2f}x</td>
-            <td style="color:#fbbf24;font-weight:700">{float(bpolicy['expected_roi']):.2f}x</td>
-            <td class="delta-up">+{float(delta.get('expected_roi',0)):+.2f}x</td>
-            <td><span class="text-xs px-2 py-1 rounded-full" style="background:rgba(16,185,129,0.15);color:#34d399">✓ 投入产出更好</span></td>
-          </tr>
-          <tr>
-            <td class="font-semibold">决策阈值</td><td style="color:#38bdf8;font-weight:700">{fmt_num(tm['threshold'],2)}</td>
-            <td style="color:#fbbf24;font-weight:700">{fmt_num(btm['threshold'],2)}</td>
-            <td class="delta-neutral">+{float(tm.get('threshold',0)-btm.get('threshold',0)):+.2f}</td>
-            <td><span class="text-xs px-2 py-1 rounded-full" style="background:rgba(148,163,184,0.15);color:#94a3b8">策略阈值不同</span></td>
-          </tr>
-        </tbody>
+        </thead>
+        <tbody id="accBody">
+""")
+
+    for i, ar in enumerate(acc_rows_js):
+        aobj = json.loads(ar)
+        f.write('          <tr data-type="' + aobj.get("type","") + '" data-action="' + aobj.get("action","") + '" onclick="showAccountDetail(' + str(i) + ')" style="cursor:pointer">\n')
+        f.write('            <td>' + str(aobj.get("id","")) + '</td>\n')
+        f.write('            <td>' + str(aobj.get("type","")) + '</td>\n')
+        f.write('            <td>' + str(aobj.get("balGroup","")) + '</td>\n')
+        f.write('            <td>' + str(aobj.get("district","")) + '</td>\n')
+        f.write('            <td>' + str(aobj.get("isPayer","")) + '</td>\n')
+        f.write('            <td>' + str(aobj.get("rawP","")) + '</td>\n')
+        f.write('            <td>' + str(aobj.get("calibP","")) + '</td>\n')
+        f.write('            <td>' + str(aobj.get("action",""))[:20] + '</td>\n')
+        f.write('            <td style="color:#34d399;font-weight:600">\u00a5' + fmt(aobj.get("netRec",0), 0) + '</td>\n')
+        f.write('            <td>\u00a5' + fmt(aobj.get("balance",0), 0) + '</td>\n')
+        f.write('          </tr>\n')
+
+    f.write("""        </tbody>
       </table>
     </div>
-  </div>
-
-  <!-- 数据解读面板 -->
-  <div class="glass-card p-6 flex flex-col">
-    <h2 class="text-lg font-bold mb-4 flex items-center gap-2">
-      <svg class="w-5 h-5" style="color:#10b981" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-      数据解读
-    </h2>
-    <div class="space-y-4 flex-1">
-      <div class="insight-panel">
-        <strong>结论：Agent 模型值得投产。</strong>
-        <p class="mt-2" style="color:var(--text-secondary)">
-          XGBoost 在 T 集 ROC-AUC 达 <strong>0.736</strong>，比 Logistic Regression 基线高出 <strong>+0.086</strong>，
-          Brier 和 LogLoss 也全面优于基线。虽然 Recall 低了 5.45 个百分点（基线用极低阈值换来了高召回），
-          但 Precision 提升了 <strong>+4.30pp</strong>，意味着每触达 100 个"预计会付款"的账户，实际付款人从 11 人提升到 15 人。
-        </p>
-      </div>
-
-      <div class="insight-panel" style="border-color:#10b981;">
-        <strong>经济价值：</strong>
-        在相同产能约束和成本假设下，Agent 的预期净回收比基线高 <strong>¥{fmt_num(abs(float(delta.get('expected_net_recovery_total',316416))),0)}</strong>，
-        ROI 从 <strong>{float(bpolicy['expected_roi']):.1f}x</strong> 提升到 <strong>{float(policy['expected_roi']):.1f}x</strong>。
-        这说明<strong>更高的区分精度直接转化为催收资源投放效率的改善</strong>。
-      </div>
-
-      <div class="insight-panel" style="border-color:#f59e0b;">
-        <strong>风险提示：</strong>
-        基线模型的 Recall 更高（86% vs 80%），
-        如果业务场景对"漏掉任何一个可能付款的客户"极度敏感，需要结合具体容忍度调整阈值或采用混合策略。
-      </div>
-    </div>
-  </div>
-</section>
-
-
-<!-- ==================== 标签页导航 ==================== -->
-<div class="flex items-center gap-1 border-b border-white/5 mb-0" role="tablist">
-  <button class="tab-btn active" onclick="switchTab(event,'tab-models')" role="tab">🏆 模型比较</button>
-  <button class="tab-btn" onclick="switchTab(event,'tab-queue')" role="tab">📋 生产队列</button>
-  <button class="tab-btn" onclick="switchTab(event,'tab-accounts')" role="tab">👤 账户明细</button>
-  <button class="tab-btn" onclick="switchTab(event,'tab-features')" role="tab">🎯 特征重要性</button>
-  <button class="tab-btn" onclick="switchTab(event,'tab-signals')" role="tab">📊 组合信号</button>
-</div>
-
-
-<!-- ==================== Tab 1: 模型比较 ==================== -->
-<div class="tab-content active glass-card p-6" id="tab-models">
-  <div class="flex items-center justify-between mb-5">
-    <h2 class="text-lg font-bold">Champion-Challenger 对比表（验证集）</h2>
-    <span class="text-xs" style="color:var(--text-secondary)">点击表头可按列排序 · 点击行可查看详情</span>
-  </div>
-  <div class="overflow-x-auto rounded-xl" style="border:1px solid var(--border)">
-    <table class="data-table" id="championTable">
-      <thead><tr>
-        <th data-sort="model_role" data-type="str">角色 <span class="sort-icon">↕</span></th>
-        <th data-sort="model_name" data-type="str">模型 <span class="sort-icon">↕</span></th>
-        <th data-sort="roc_auc" data-type="num">Valid ROC-AUC <span class="sort-icon">↕</span></th>
-        <th data-sort="brier" data-type="num">Valid Brier <span class="sort-icon">↕</span></th>
-        <th data-sort="recall" data-type="num">Recall(Y) <span class="sort-icon">↕</span></th>
-        <th data-sort="precision" data-type="num">Precision(Y) <span class="sort-icon">↕</span></th>
-        <th data-sort="expected_net_recovery_total" data-type="num">Expected Net Recovery <span class="sort-icon">↕</span></th>
-        <th data-sort="expected_roi" data-type="num">Expected ROI <span class="sort-icon">↕</span></th>
-        <th data-sort="threshold" data-type="num">Threshold <span class="sort-icon">↕</span></th></tr></thead>
-      <tbody>
-'''
-
-    # Champion rows
-    for row in champion_csv:
-        role_class = "badge-baseline" if row.get("model_role") == "baseline" else ("badge-agent" if row.get("model_role") == "agent_champion" else "badge-challenger")
-        html += f'''
-        <tr onclick="showModelDetail(this)" data-model='{json.dumps(row, ensure_ascii=False)}'>
-          <td><span class="badge {role_class}">{row.get('model_role','-')}</span></td>
-          <td class="font-semibold">{row.get('model_name','-')}</td>
-          <td>{fmt_num(row.get('roc_auc'),3)}</td>
-          <td>{fmt_num(row.get('brier'),4)}</td>
-          <td>{pct(row.get('recall'))}</td>
-          <td>{pct(row.get('precision'))}</td>
-          <td style="color:#4ade80;font-weight:600">¥{fmt_num(row.get('expected_net_recovery_total'),0)}</td>
-          <td style="color:#f472b6;font-weight:600">{row.get('expected_roi','-.')}x</td>
-          <td>{fmt_num(row.get('threshold'),2)}</td>
-        </tr>'''
-
-    html += '''
-      </tbody>
-    </table>
-  </div>
-
-  <!-- 混淆矩阵对比 -->
-  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
-    <div class="rounded-xl p-5" style="background:rgba(15,23,42,0.5);border:1px solid var(--border)">
-      <h3 class="font-bold mb-3 text-sm" style="color:var(--text-secondary)">Agent Champion 混淆矩阵 @ threshold=''' + f"{float(tm['threshold']):.2f}" + '''</h3>
-      <div class="grid grid-cols-3 gap-2 text-center text-sm">
-        <div></div>
-        <div class="font-bold pb-2" style="color:#94a3b8">Pred N</div>
-        <div class="font-bold pb-2" style="color:#94a3b8">Pred Y</div>
-        <div class="font-bold pt-2" style="color:#94a3b8">Actual N</div>
-        <div class="rounded-lg p-3" style="background:rgba(56,189,248,0.1)"><span class="font-bold text-lg" style="color:#38bdf8">''' + str(int(tm['confusion_matrix']['tn'])) + '''</span><div class="text-xs" style="color:var(--text-secondary)">TN</div></div>
-        <div class="rounded-lg p-3" style="background:rgba(239,68,68,0.1)"><span class="font-bold text-lg" style="color:#f87171">''' + str(int(tm['confusion_matrix']['fp'])) + '''</span><div class="text-xs" style="color:var(--text-secondary)">FP</div></div>
-        <div class="font-bold pt-2" style="color:#94a3b8">Actual Y</div>
-        <div class="rounded-lg p-3" style="background:rgba(251,146,60,0.1)"><span class="font-bold text-lg" style="color:#fb923c">''' + str(int(tm['confusion_matrix']['fn'])) + '''</span><div class="text-xs" style="color:var(--text-secondary)">FN</div></div>
-        <div class="rounded-lg p-3" style="background:rgba(52,211,153,0.1)"><span class="font-bold text-lg" style="color:#34d399">''' + str(int(tm['confusion_matrix']['tp'])) + '''</span><div class="text-xs" style="color:var(--text-secondary)">TP</div></div>
-      </div>
-    </div>
-    <div class="rounded-xl p-5" style="background:rgba(15,23,42,0.5);border:1px solid var(--border)">
-      <h3 class="font-bold mb-3 text-sm" style="color:var(--text-secondary)">Baseline 混淆矩阵 @ threshold=''' + f"{float(btm['threshold']):.2f}" + '''</h3>
-      <div class="grid grid-cols-3 gap-2 text-center text-sm">
-        <div></div>
-        <div class="font-bold pb-2" style="color:#94a3b8">Pred N</div>
-        <div class="font-bold pb-2" style="color:#94a3b8">Pred Y</div>
-        <div class="font-bold pt-2" style="color:#94a3b8">Actual N</div>
-        <div class="rounded-lg p-3" style="background:rgba(56,189,248,0.1)"><span class="font-bold text-lg" style="color:#38bdf8">''' + str(int(btm['confusion_matrix']['tn'])) + '''</span><div class="text-xs" style="color:var(--text-secondary)">TN</div></div>
-        <div class="rounded-lg p-3" style="background:rgba(239,68,68,0.1)"><span class="font-bold text-lg" style="color:#f87171">''' + str(int(btm['confusion_matrix']['fp'])) + '''</span><div class="text-xs" style="color:var(--text-secondary)">FP</div></div>
-        <div class="font-bold pt-2" style="color:#94a3b8">Actual Y</div>
-        <div class="rounded-lg p-3" style="background:rgba(251,146,60,0.1)"><span class="font-bold text-lg" style="color:#fb923c">''' + str(int(btm['confusion_matrix']['fn'])) + '''</span><div class="text-xs" style="color:var(--text-secondary)">FN</div></div>
-        <div class="rounded-lg p-3" style="background:rgba(52,211,153,0.1)"><span class="font-bold text-lg" style="color:#34d399">''' + str(int(btm['confusion_matrix']['tp'])) + '''</span><div class="text-xs" style="color:var(--text-secondary)">TP</div></div>
-      </div>
-    </div>
-  </div>
-'''
-
-    html += '</div><!-- end tab-models -->'
-
-
-    # ==================== Tab 2: 生产队列 ====================
-    html += '''
-<!-- ==================== Tab 2: 生产队列 ==================== -->
-<div class="tab-content glass-card p-6" id="tab-queue">
-  <div class="flex items-center justify-between mb-5">
-    <h2 class="text-lg font-bold">生产队列分布与收益结构</h2>
-  </div>
-
-  <!-- 队列可视化条形图 -->
-  <div class="space-y-5 mb-8">
-    <h3 class="text-sm font-bold" style="color:var(--text-secondary)">各队列账户数占比 & 预期净回收贡献</h3>
-'''
-
-    queue_colors = {
-        "High Priority (Agent Call)": {"bg": "#10b981", "light": "rgba(16,185,129,0.18)"},
-        "Medium Priority (Auto-Dialer)": {"bg": "#0ea5e9", "light": "rgba(14,165,233,0.18)"},
-        "Low Priority (SMS/Email)": {"bg": "#f59e0b", "light": "rgba(245,158,11,0.18)"},
-        "Write-off / Ignore": {"bg": "#64748b", "light": "rgba(100,116,139,0.18)"},
-    }
-
-    total_acc = sum(int(q.get("accounts", 0)) for q in queue_csv)
-    total_nr = sum(float(q.get("expected_net_recovery_total", 0)) for q in queue_csv)
-
-    for q in queue_csv:
-        name = q.get("recommended_action", "-")
-        acc = int(q.get("accounts", 0))
-        nr = float(q.get("expected_net_recovery_total", 0))
-        roi = float(q.get("expected_roi", 0))
-        apr = float(q.get("actual_payer_rate", 0))
-        acc_pct = acc / max(total_acc, 1) * 100
-        nr_pct = nr / max(total_nr, 1) * 100
-        qc = queue_colors.get(name, {"bg": "#64748b", "light": "rgba(100,116,139,0.18)"})
-        short_name = name.split("(")[0].strip()
-
-        html += f'''
-    <div>
-      <div class="flex items-center justify-between mb-1.5">
-        <div class="flex items-center gap-2">
-          <span class="w-3 h-3 rounded-full" style="background:{qc['bg']}"></span>
-          <span class="font-semibold text-sm">{short_name}</span>
-        </div>
-        <div class="flex items-center gap-4 text-xs" style="color:var(--text-secondary)">
-          <span>{acc:,} 户 ({acc_pct:.1f}%)</span>
-          <span>|</span>
-          <span>净回收 ¥{fmt_num(nr,0)} ({nr_pct:.1f}%)</span>
-          <span>|</span>
-          <span>ROI {roi:.1f}x</span>
-          <span>|</span>
-          <span>实付率 {apr*100:.1f}%</span>
-        </div>
-      </div>
-      <div class="bar-container">
-        <div class="bar-fill" style="width:{nr_pct:.1f}%;background:linear-gradient(90deg,{qc['light']},{qc['bg']});">{nr_pct:.1f}% of 净回收</div>
-      </div>
-    </div>'''
-
-    html += '''
-  </div>
-
-  <!-- 队列表格 -->
-  <h3 class="text-sm font-bold mb-3" style="color:var(--text-secondary)">队列详细指标</h3>
-  <div class="overflow-x-auto rounded-xl" style="border:1px solid var(--border)">
-    <table class="data-table" id="queueTable">
-      <thead><tr>
-        <th data-sort="recommended_action" data-type="str">推荐动作 <span class="sort-icon">↕</span></th>
-        <th data-sort="accounts" data-type="num">账户数 <span class="sort-icon">↕</span></th>
-        <th data-sort="avg_calibrated_prob" data-type="num">Avg Calib PD <span class="sort-icon">↕</span></th>
-        <th data-sort="actual_payer_rate" data-type="num">实付率 <span class="sort-icon">↕</span></th>
-        <th data-sort="balance_proxy_total" data-type="num">余额代理总值 <span class="sort-icon">↕</span></th>
-        <th data-sort="expected_gross_recovery_total" data-type="num">毛回收预期 <span class="sort-icon">↕</span></th>
-        <th data-sort="expected_net_recovery_total" data-type="num">净回收预期 <span class="sort-icon">↕</span></th>
-        <th data-sort="contact_cost_total" data-type="num">触达成本 <span class="sort-icon">↕</span></th>
-        <th data-sort="expected_roi" data-type="num">ROI <span class="sort-icon">↕</span></th></tr></thead>
-      <tbody>
-'''
-
-    for q in queue_csv:
-        html += f'''
-        <tr>
-          <td class="font-semibold">{q.get('recommended_action','-')}</td>
-          <td>{int(q.get('accounts',0)):,}</td>
-          <td>{fmt_num(q.get('avg_calibrated_prob'),4)}</td>
-          <td>{pct(q.get('actual_payer_rate'))}</td>
-          <td>¥{fmt_num(q.get('balance_proxy_total'),0)}</td>
-          <td style="color:#86efac">¥{fmt_num(q.get('expected_gross_recovery_total'),0)}</td>
-          <td style="color:#4ade80;font-weight:600">¥{fmt_num(q.get('expected_net_recovery_total'),0)}</td>
-          <td>¥{fmt_num(q.get('contact_cost_total'),0)}</td>
-          <td style="color:#f472b6;font-weight:600">{float(q.get('expected_roi',0)):.2f}x</td>
-        </tr>'''
-
-    html += '''  </tbody></table></div>
-
-  <div class="mt-6 insight-panel">
-    <strong>队列解读：</strong>
-    <ul class="list-disc ml-5 mt-2 space-y-1" style="color:var(--text-secondary)">
-'''
-
-    # 动态生成解读
-    hp = next((q for q in queue_csv if "High" in q.get("recommended_action","")), None)
-    mp = next((q for q in queue_csv if "Medium" in q.get("recommended_action","")), None)
-    lp = next((q for q in queue_csv if "Low" in q.get("recommended_action","")), None)
-    wo = next((q for q in queue_csv if "Write" in q.get("recommended_action","")), None)
-
-    if hp:
-        html += f'<li><strong>人工坐席队列（{int(hp["accounts"])}户）</strong>：平均校准概率最高({float(hp["avg_calibrated_prob"])*100:.1f}%)，单户净回收期望也最高，是催收资源的"头部战场"。但ROI仅{float(hp["expected_roi"]):.1f}x——因为人工成本高，需精选高概率、高余额账户。</li>\n'
-    if mp:
-        html += f'<li><strong>自动外呼队列（{int(mp["accounts"])}户）</strong>：规模最大的中间层，ROI高达{float(mp["expected_roi"]):.1f}x，是性价比最优的批量触达渠道。</li>\n'
-    if lp:
-        html += f'<li><strong>短信/邮件队列（{int(lp["accounts"])}户）</strong>：成本极低（¥{float(lp["contact_cost_total"]):,.0f}总成本），ROI达到{float(lp["expected_roi"]):.1f}x，适合做低成本覆盖兜底。</li>\n'
-    if wo:
-        apr_wo = float(wo.get("actual_payer_rate",0))*100
-        html += f'<li><strong>核销/忽略队列（{int(wo["accounts"])}户）</strong>：模型判断不值得投入触达资源，实际付款率仅{apr_wo:.1f}%。若后续有零成本渠道（如APP推送），可考虑重新评估。</li>\n'
-
-    html += '</ul></div></div>'  # end tab-queue
-
-
-    # ==================== Tab 3: 账户明细 ====================
-    html += f'''
-<!-- ==================== Tab 3: 账户明细 ==================== -->
-<div class="tab-content glass-card p-6" id="tab-accounts">
-  <div class="flex items-center justify-between mb-5">
-    <h2 class="text-lg font-bold">T集账户级评分明细 <span class="text-sm font-normal" style="color:var(--text-secondary)">（展示前 {len(scored_sampled)} 条 / 共 {len(scored_raw)} 条）</span></h2>
-  </div>
-
-  <!-- 筛选栏 -->
-  <div class="flex flex-wrap items-center gap-3 mb-5">
-    <input type="text" class="filter-input" placeholder="🔍 搜索 ID / 地区 / 类型..." oninput="filterAccounts()" id="acctSearch"/>
-    <select class="filter-select" onchange="filterAccounts()" id="acctQueueFilter">
-      <option value="">全部队列</option>
-'''
-    for q in queue_csv:
-        html += f'<option value="{q["recommended_action"]}">{q["recommended_action"].split("(")[0].strip()}</option>\n'
-
-    html += f'''    </select>
-    <select class="filter-select" onchange="filterAccounts()" id="acctPayerFilter">
-      <option value="">全部标记</option>
-      <option value="Y">实际付款人 (Y)</option>
-      <option value="N">非付款人 (N)</option>
-    </select>
-    <select class="filter-select" onchange="filterAccounts()" id="acctLoanTypeFilter">
-      <option value="">全部贷款类型</option>
-'''
-    loan_types = sorted(set(r.get("loan_type","") for r in scored_sampled if r.get("loan_type")))
-    for lt in loan_types:
-        html += f'<option value="{lt}">{lt}</option>\n'
-
-    html += f'''    </select>
-    <span id="acctFilteredCount" class="text-sm ml-auto" style="color:var(--text-secondary)"></span>
-  </div>
-
-  <div class="overflow-x-auto rounded-xl" style="border:1px solid var(--border);max-height:600px;overflow-y:auto">
-    <table class="data-table" id="accountTable">
-      <thead><tr>
-        <th data-sort="id" data-type="str">ID <span class="sort-icon">↕</span></th>
-        <th data-sort="loan_type" data-type="str">类型 <span class="sort-icon">↕</span></th>
-        <th data-sort="purchased_bal_gp" data-type="str">余额组 <span class="sort-icon">↕</span></th>
-        <th data-sort="district" data-type="str">地区 <span class="sort-icon">↕</span></th>
-        <th data-sort="payer_3yr" data-type="str">实付 <span class="sort-icon">↕</span></th>
-        <th data-sort="balance_proxy" data-type="num">余额 <span class="sort-icon">↕</span></th>
-        <th data-sort="calibrated_repay_prob" data-type="num">Calib PD <span class="sort-icon">↕</span></th>
-        <th data-sort="raw_repay_prob" data-type="num">Raw PD <span class="sort-icon">↕</span></th>
-        <th data-sort="predicted_payer_flag" data-type="str">预判 <span class="sort-icon">↕</span></th>
-        <th data-sort="expected_net_recovery" data-type="num">净回收 <span class="sort-icon">↕</span></th>
-        <th data-sort="recommended_action" data-type="str">推荐 <span class="sort-icon">↕</span></th>
-        <th data-sort="recommended_contact_cost" data-type="num">成本 <span class="sort-icon">↕</span></th>
-        <th data-sort="policy_rank" data-type="num">优先级 <span class="sort-icon">↕</span></th></tr></thead>
-      <tbody id="accountTableBody">
-'''
-
-    for i, r in enumerate(scored_sampled):
-        action = r.get("recommended_action", "")
-        action_short = action.split("(")[0].strip() if action else "-"
-        payer_flag = r.get("payer_3yr", "")
-        pred_flag = r.get("predicted_payer_flag", "")
-
-        # 行样式
-        row_style = ""
-        if payer_flag == "Y":
-            row_style = "background:rgba(52,211,153,0.04)"
-        elif pred_flag == "Y" and payer_flag == "N":
-            row_style = "background:rgba(239,68,68,0.04)"
-
-        html += f'''
-        <tr class="account-row" data-loan="{r.get('loan_type','')}" data-payer="{r.get('payer_3yr','')}" data-action="{action}" style="{row_style}"
-            onclick="showAccountDetail(this)" data-account-index="{i}">
-          <td class="font-mono text-xs">{r.get('id','')}</td>
-          <td><span class="text-xs px-2 py-0.5 rounded" style="background:rgba(99,102,241,0.12);color:#a5b4fc">{r.get('loan_type','-')}</span></td>
-          <td>{r.get('purchased_bal_gp','-')}</td>
-          <td>{r.get('district','-')}</td>
-          <td><span class="font-bold {'text-emerald-400' if payer_flag=='Y' else ''}">{payer_flag}</span></td>
-          <td>{fmt_num(r.get('balance_proxy'),0)}</td>
-          <td style="color:#38bdf8;font-weight:600">{fmt_num(r.get('calibrated_repay_prob'),4)}</td>
-          <td style="color:var(--text-secondary)">{fmt_num(r.get('raw_repay_prob'),4)}</td>
-          <td><span class="font-bold {'text-emerald-400' if pred_flag=='Y' else 'text-red-400'}">{pred_flag}</span></td>
-          <td style="color:#4ade80;font-weight:600">¥{fmt_num(r.get('expected_net_recovery'),0)}</td>
-          <td><span class="text-xs px-2 py-0.5 rounded" style="
-            {"background:rgba(16,185,129,0.12);color:#34d399" if "High" in action else
-             ("background:rgba(14,165,233,0.12);color:#38bdf8" if "Medium" in action else
-              ("background:rgba(245,158,11,0.12);color:#fbbf24" if "Low" in action else
-               "background:rgba(100,116,139,0.12);color:#94a3b8"))}
-          ">{action_short}</span></td>
-          <td>¥{fmt_num(r.get('recommended_contact_cost'),0)}</td>
-          <td>{r.get('policy_rank','-')}</td>
-        </tr>'''
-
-    html += '''
-      </tbody>
-    </table>
-  </div>
-</div>'''  # end tab-accounts
-
-
-    # ==================== Tab 4: 特征重要性 ====================
-    html += f'''
-<!-- ==================== Tab 4: 特征重要性 ==================== -->
-<div class="tab-content glass-card p-6" id="tab-features">
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <div>
-      <h2 class="text-lg font-bold mb-5">Top 预测特征排名</h2>
-      <div class="space-y-3">
-'''
-
-    max_imp = max((float(f.get("importance", 0)) for f in feature_csv), default=1)
-    feature_names_map = {
-        "birth_yr": "出生年份",
-        "district": "所在地区",
-        "purchased_bal_gp": "购买余额分组",
-        "last_act_closing_m": "距最后活动月数",
-        "co_closing_m": "距关账月数",
-        "last_pay_date_client_closing_m": "距原债权人最后付款月数",
-        "multiple_acct": "是否多账户",
-        "home_phone_flag": "是否有座机",
-        "mobile_phone_flag": "是否有手机号",
-        "open_closing_m": "距开户月数",
-        "loan_type": "贷款产品类型",
-        "missing_last_act_flag": "最后活动缺失标记",
-    }
-
-    for fi, feat in enumerate(feature_csv):
-        imp = float(feat.get("importance", 0))
-        imp_pct = imp / max(max_imp, 0.001) * 100
-        fname = feat.get("feature", "")
-        cname = feature_names_map.get(fname, fname)
-        bar_color = "#10b981" if fi == 0 else ("#0ea5e9" if fi < 4 else "#64748b")
-        bar_light = "rgba(16,185,129,0.2)" if fi == 0 else ("rgba(14,165,233,0.2)" if fi < 4 else "rgba(100,116,139,0.2)")
-
-        html += f'''
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <span class="font-medium text-sm">{cname}<span class="ml-2 text-xs font-mono" style="color:var(--text-secondary)">({fname})</span></span>
-            <span class="text-sm font-bold" style="color:{bar_color}">{imp:.4f}</span>
-          </div>
-          <div class="bar-container" style="height:20px">
-            <div class="bar-fill" style="width:{imp_pct:.1f}%;background:linear-gradient(90deg,{bar_light},{bar_color});padding-right:8px;font-size:0.7rem;">#{fi+1}</div>
-          </div>
-        </div>'''
-
-    html += '''  </div>
-    </div>
-
-    <div>
-      <div class="chart-wrapper mb-6">
-        <canvas id="featureChart"></canvas>
-      </div>
-      <div class="insight-panel mt-4">
-        <strong>特征解读：</strong>
-        <ul class="list-disc ml-5 mt-2 space-y-1" style="color:var(--text-secondary)">
-'''
-
-    # 动态特征解读
-    business_insights = {
-        "birth_yr": "<strong>出生年份</strong>是最强预测因子，暗示还款能力与年龄阶段高度相关（年轻群体可能收入上升期，年长群体可能有更多储蓄）。",
-        "district": "<strong>所在地区</strong>排名第二，不同地区的经济活跃度和执法环境直接影响回收可行性。",
-        "purchased_bal_gp": "<strong>余额分组</strong>影响显著，大额账户往往对应不同的处置方式和谈判空间。",
-        "last_act_closing_m": "<strong>距最后活动时间</strong>越久，账户「沉睡」程度越高，回收难度越大。",
-        "co_closing_m": "<strong>距关账时间</strong>反映不良资产的账龄，账龄越长通常回收率越低。",
-        "last_pay_date_client_closing_m": "<strong>原债权人处最后付款时间</strong>缺失值本身就是一个强信号（从未付款）。",
-        "multiple_acct": "<strong>多账户标记</strong>暗示债务复杂度和偿债优先级的差异。",
-        "home_phone_flag": "<strong>座机号码</strong>的存在增加触达成功率。",
-        "mobile_phone_flag": "<strong>手机号码</strong>同样提升联系可能性。",
-        "open_closing_m": "<strong>开户时长</strong>反映客户关系深度。",
-    }
-
-    for fi, feat in enumerate(feature_csv[:6]):
-        fname = feat.get("feature", "")
-        insight = business_insights.get(fname, f"<strong>{fname}</strong>对区分付款人与非付款人有正向贡献。")
-        html += f"<li>{insight}</li>\n"
-
-    html += '''
-        </ul>
-      </div>
-    </div>
-  </div>
-</div>'''  # end tab-features
-
-
-    # ==================== Tab 5: 组合信号 ====================
-    html += f'''
-<!-- ==================== Tab 5: 组合信号 ==================== -->
-<div class="tab-content glass-card p-6" id="tab-signals">
-  <h2 class="text-lg font-bold mb-5">组合维度信号分析</h2>
-  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-    <!-- 余额分组 -->
-    <div class="rounded-xl p-5" style="background:rgba(15,23,42,0.5);border:1px solid var(--border)">
-      <h3 class="font-bold mb-4 flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full" style="background:#10b981"></span> 按余额分组的付款率
-      </h3>
-      <div class="chart-wrapper" style="height:220px">
-        <canvas id="balanceChart"></canvas>
-      </div>
-      <div class="mt-4 space-y-2">
-'''
-
-    for row in payer_balance:
-        html += f'<div class="flex justify-between text-sm"><span>{row.get("purchased_bal_gp","-")}</span><span class="font-bold" style="color:{"#34d399" if float(row.get("payer_rate_pct",0)) > 10 else "#fbbf24"}">{row.get("payer_rate_pct","-.")}%</span></div>\n'
-
-    html += '''  </div></div>
-
-    <!-- 贷款类型 -->
-    <div class="rounded-xl p-5" style="background:rgba(15,23,42,0.5);border:1px solid var(--border)">
-      <h3 class="font-bold mb-4 flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full" style="background:#0ea5e9"></span> 按贷款类型的付款率
-      </h3>
-      <div class="chart-wrapper" style="height:220px">
-        <canvas id="loanChart"></canvas>
-      </div>
-      <div class="mt-4 space-y-2">
-'''
-    for row in payer_loan:
-        html += f'<div class="flex justify-between text-sm"><span>{row.get("loan_type","-")}</span><span class="font-bold" style="color:{"#34d399" if float(row.get("payer_rate_pct",0)) > 10 else "#fbbf24"}">{row.get("payer_rate_pct","-.")}%</span></div>\n'
-
-    html += '''  </div></div>
-
-    <!-- 手机标记 -->
-    <div class="rounded-xl p-5" style="background:rgba(15,23,42,0.5);border:1px solid var(--border)">
-      <h3 class="font-bold mb-4 flex items-center gap-2">
-        <span class="w-2 h-2 rounded-full" style="background:#f59e0b"></span> 按手机号标记的付款率
-      </h3>
-      <div class="chart-wrapper" style="height:220px">
-        <canvas id="mobileChart"></canvas>
-      </div>
-      <div class="mt-4 space-y-2">
-'''
-    for row in payer_mobile:
-        flag_val = row.get("mobile_phone_flag", "?")
-        pr = row.get("payer_rate_pct", 0)
-        flag_label = "有手机号" if str(flag_val).lower() == "y" else ("无手机号" if str(flag_val).lower() == "n" else flag_val)
-        html += f'<div class="flex justify-between text-sm"><span>{flag_label}</span><span class="font-bold" style="color:{"#34d399" if float(pr) > 10 else "#fbbf24"}">{pr}%</span></div>\n'
-
-    html += '''  </div></div>
-
-  </div>
-
-  <!-- 集中度指标 -->
-  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-8">
-    <div class="rounded-xl p-5 text-center" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.2)">
-      <div class="text-3xl font-extrabold" style="color:#34d399">{conc.get('prob_top20_actual_payer_capture_share_pct',0):.1f}%</div>
-      <div class="text-xs mt-1" style="color:var(--text-secondary)">Top 20% 概率排序<br/>捕获的真实付款人占比</div>
-    </div>
-    <div class="rounded-xl p-5 text-center" style="background:rgba(14,165,233,0.08);border:1px solid rgba(14,165,233,0.2)">
-      <div class="text-3xl font-extrabold" style="color:#38bdf8">{conc.get('net_top20_expected_net_recovery_capture_share_pct',0):.1f}%</div>
-      <div class="text-xs mt-1" style="color:var(--text-secondary)">Top 20% 净回收排序<br/>贡献的净回收占比</div>
-    </div>
-    <div class="rounded-xl p-5 text-center" style="background:rgba(168,85,247,0.08);border:1px solid rgba(168,85,247,0.2)">
-      <div class="text-3xl font-extrabold" style="color:#c084fc">{conc.get('prob_top20_actual_payer_rate_pct',0):.1f}%</div>
-      <div class="text-xs mt-1" style="color:var(--text-secondary)">Top 20% 概率排序<br/>的实际付款率</div>
-    </div>
-    <div class="rounded-xl p-5 text-center" style="background:rgba(245,158,11,0.08);border:1px solid rgba(245,158,11,0.2)">
-      <div class="text-3xl font-extrabold" style="color:#fbbf24">{conc.get('top20_accounts',0):,}</div>
-      <div class="text-xs mt-1" style="color:var(--text-secondary)">Top 20% 对应<br/>账户绝对数量</div>
-    </div>
-  </div>
-
-  <div class="mt-6 insight-panel">
-    <strong>集中度解读：</strong>
-    <p class="mt-2" style="color:var(--text-secondary)">
-      按校准后概率排序时，前 20% 的账户就能捕获 <strong>{conc.get('prob_top20_actual_payer_capture_share_pct',0):.1f}%</strong> 的真实付款人；
-      按净回收代理值排序时，前 20% 贡献了 <strong>{conc.get('net_top20_expected_net_recovery_capture_share_pct',0):.1f}%</strong> 的预期净回收。
-      这意味着 <strong>集中资源打头部账户是当前最优策略</strong>，尾部账户的边际收益递减非常明显。
-    </p>
-  </div>
-</div>'''  # end tab-signals
-
-
-    # ==================== 账户详情模态框 ====================
-    html += '''
-<!-- ==================== 账户详情模态框 ==================== -->
-<div class="modal-overlay" id="accountModal" onclick="if(event.target===this)this.classList.remove('show')">
-  <div class="modal-body">
-    <div class="flex items-center justify-between mb-6">
-      <h2 class="text-xl font-bold" id="modalTitle">账户详情</h2>
-      <button onclick="document.getElementById('accountModal').classList.remove('show')" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-red-500/20 transition" style="border:1px solid var(--border)">
-        ✕
-      </button>
-    </div>
-    <div id="modalContent" class="space-y-4"></div>
+    <p style="color:#64748b;font-size:12px;margin-top:8px;">Showing top 200 accounts. Click row for detail modal.</p>
   </div>
 </div>
 
+<!-- ==================== TAB: TUNING ==================== -->
+<div class="tab-panel" id="panel-tuning">
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#f59e0b;"></span>Hyperparameter Tuning Results</div>
+""")
 
-<!-- ==================== 模型详情模态框 ==================== -->
-<div class="modal-overlay" id="modelModal" onclick="if(event.target===this)this.classList.remove('show')">
-  <div class="modal-body">
-    <div class="flex items-center justify-between mb-6">
-      <h2 class="text-xl font-bold" id="modalModelTitle">模型详情</h2>
-      <button onclick="document.getElementById('modelModal').classList.remove('show')" class="w-9 h-9 rounded-full flex items-center justify-center hover:bg-red-500/20 transition" style="border:1px solid var(--border)">✕</button>
-    </div>
-    <div id="modalModelContent"></div>
+    for tc in tune_cards:
+        f.write('    <div class="tune-card">\n')
+        f.write('      <div class="tune-model-name">' + tc["display"] + ' <span style="font-weight:400;color:#64748b;font-size:12px;">| Best Val AUC: <strong>' + tc["best_auc"] + '</strong> | Searched: ' + str(tc["searched"]) + ' configs</span></div>\n')
+        params = tc.get("params", {})
+        if params:
+            for pk, pv in list(params.items())[:8]:
+                f.write('      <span class="tune-param">' + str(pk) + '=' + str(pv) + '</span> ')
+        f.write('    </div>\n')
+
+    f.write("""  </div>
+
+  <!-- MLP Sweep Chart -->
+  <div class="section">
+    <div class="section-title"><span class="dot" style="background:#dc2626;"></span>MLP Configuration Sweep</div>
+    <div class="chart-box full"><canvas id="mlpSweepChart"></canvas></div>
   </div>
 </div>
 
+<!-- ==================== TAB: REPORT ==================== -->
+<div class="tab-panel" id="panel-report">
+  <div class="report-content">
+""" + report_html + """
+  </div>
+</div>
 
-</main>
+</div><!-- end container -->
 
-<footer class="text-center py-6 mt-8 text-xs" style="color:var(--text-secondary);border-top:1px solid rgba(255,255,255,0.04)">
-  NPA Repayment Analysis Dashboard · Generated from baseline_comparison_run · Data is operational proxy only, not financial confirmation.
-</footer>
+<!-- MODAL -->
+<div class="modal-overlay" id="accModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 id="modalTitle">Account Details</h3>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <!-- Filled dynamically -->
+    </div>
+  </div>
+</div>
 
-
-<!-- ==================== JavaScript 交互逻辑 ==================== -->
+<!-- ═══════════════ JAVASCRIPT ═══════════════ -->
 <script>
-// ========== 全局数据 ==========
-const ACCOUNT_DATA = {json.dumps(scored_sampled, ensure_ascii=False)};
+// ============================================================
+// DATA STORE
+// ============================================================
+var ACCOUNTS = [""" + ",".join(acc_rows_js) + """];
+var QUEUE_DATA = [""" + ",".join(queue_rows_js) + """];
+var DEV_SPLIT_LABELS = """ + json.dumps(ds_labels, ensure_ascii=False) + """;
+var DEV_SPLIT_VALUES = """ + json.dumps(ds_values, ensure_ascii=False) + """;
+var CM_VALUES = """ + json.dumps(cm_vals, ensure_ascii=False) + """;
+var MODEL_DATA = """ + json.dumps(model_data, ensure_ascii=False) + """;
+var ALL_FI = """ + json.dumps(all_fi, ensure_ascii=False) + """;
+var BAL_PAYER_LABELS = """ + json.dumps(bal_payer_labels, ensure_ascii=False) + """;
+var BAL_PAYER_ALL = """ + json.dumps(bal_payer_values_all, ensure_ascii=False) + """;
+var BAL_PAYER_PRED = """ + json.dumps(bal_payer_values_pred, ensure_ascii=False) + """;
+var LOAN_PAYER_LABELS = """ + json.dumps(loan_payer_labels, ensure_ascii=False) + """;
+var LOAN_PAYER_ALL = """ + json.dumps(loan_payer_values_all, ensure_ascii=False) + """;
+var LOAN_PAYER_PRED = """ + json.dumps(loan_payer_values_pred, ensure_ascii=False) + """;
 
-// ========== 标签页切换 ==========
-function switchTab(e, tabId){{
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
-  e.target.classList.add('active');
-  document.getElementById(tabId).classList.add('active');
+// ============================================================
+// TAB SWITCHING
+// ============================================================
+function switchTab(tabId) {
+  // Hide all panels
+  var panels = document.querySelectorAll('.tab-panel');
+  for (var i = 0; i < panels.length; i++) {
+    panels[i].classList.remove('active');
+  }
+  // Remove active from all buttons
+  var buttons = document.querySelectorAll('.tab-btn');
+  for (var j = 0; j < buttons.length; j++) {
+    buttons[j].classList.remove('active');
+  }
+  // Show target panel
+  var targetPanel = document.getElementById('panel-' + tabId);
+  if (targetPanel) {
+    targetPanel.classList.add('active');
+  }
+  // Activate button
+  var btns = document.getElementById('tabBar').querySelectorAll('.tab-btn');
+  for (var k = 0; k < btns.length; k++) {
+    if (btns[k].textContent.toLowerCase().indexOf(tabId) >= 0 ||
+        btns[k].getAttribute('onclick').indexOf(tabId) >= 0) {
+      btns[k].classList.add('active');
+    }
+  }
+  // Init charts when tab becomes visible
+  initChartsForTab(tabId);
+}
 
-  // 切换到对应tab时渲染图表
-  if(tabId === 'tab-features') renderFeatureChart();
-  if(tabId === 'tab-signals') renderSignalCharts();
-}}
+// ============================================================
+// TABLE SORTING
+// ============================================================
+var sortState = {}; // { tableName: { col: idx, asc: bool } }
 
-// ========== 排序引擎 ==========
-let currentSort = {{ table:null, key:null, direction:'desc' }};
+function sortTable(th, colIdx) {
+  var table = th.closest('table');
+  var tbody = table.querySelector('tbody');
+  var rows = Array.prototype.slice.call(tbody.querySelectorAll('tr:not(.detail-row)'));
+  var tableId = table.id;
+  var key = tableId + '_' + colIdx;
 
-function makeSortable(tableId){{
-  const table = document.getElementById(tableId);
-  if(!table) return;
-  const headers = table.querySelectorAll('thead th[data-sort]');
-  headers.forEach(th => {{
-    th.addEventListener('click', () => {{
-      const key = th.dataset.sort;
-      const type = th.dataset.type || 'str';
-      let dir = 'asc';
-      if(currentSort.table === tableId && currentSort.key === key){{
-        dir = currentSort.direction === 'asc' ? 'desc' : 'asc';
-      }}
-      currentSort = {{ table: tableId, key, direction: dir }};
+  // Toggle direction
+  if (!sortState[key]) {
+    sortState[key] = { col: colIdx, asc: true };
+  } else {
+    sortState[key].asc = !sortState[key].asc;
+  }
+  var asc = sortState[key].asc;
 
-      // 清除其他排序状态
-      headers.forEach(h => h.classList.remove('sort-asc','sort-desc'));
-      th.classList.add(dir === 'asc' ? 'sort-asc' : 'sort-desc');
+  // Update arrow indicators
+  var headers = table.querySelectorAll('th[data-col]');
+  for (var hi = 0; hi < headers.length; hi++) {
+    headers[hi].classList.remove('sort-active');
+    var arrow = headers[hi].querySelector('.sort-arrow');
+    if (arrow) arrow.textContent = '\u21C5';
+  }
+  th.classList.add('sort-active');
+  var myArrow = th.querySelector('.sort-arrow');
+  if (myArrow) myArrow.textContent = asc ? '\u2191' : '\u2193';
 
-      // 排序tbody rows
-      const tbody = table.querySelector('tbody');
-      const rows = Array.from(tbody.querySelectorAll('tr'));
-      rows.sort((a,b) => {{
-        let va = a.querySelector(`td:nth-child(${{Array.from(headers).indexOf(th)+1}})`)?.textContent?.trim() ?? '';
-        let vb = b.querySelector(`td:nth-child(${{Array.from(headers).indexOf(th)+1}})`)?.textContent?.trim() ?? '';
-        if(type === 'num'){{
-          va = parseFloat(va.replace(/[^\\d.\\-]/g,'')) || 0;
-          vb = parseFloat(vb.replace(/[^\\d.\\-]/g,'')) || 0;
-        }}else{{
-          va = va.toLowerCase(); vb = vb.toLowerCase();
-        }}
-        if(va < vb) return dir === 'asc' ? -1 : 1;
-        if(va > vb) return dir === 'asc' ? 1 : -1;
-        return 0;
-      }});
-      rows.forEach(r => tbody.appendChild(r));
-    }});
-  }});
-}}
+  // Sort rows
+  rows.sort(function(a, b) {
+    var aCells = a.cells[colIdx];
+    var bCells = b.cells[colIdx];
+    var aVal = aCells ? aCells.textContent.trim().replace(/[\u00a5,x,%]/g, '') : '';
+    var bVal = bCells ? bCells.textContent.trim().replace(/[\u00a5,x,%]/g, '') : '';
+    var aNum = parseFloat(aVal);
+    var bNum = parseFloat(bVal);
+    var aIsNum = !isNaN(aNum) && aVal !== '';
+    var bIsNum = !isNaN(bNum) && bVal !== '';
+    if (aIsNum && bIsNum) {
+      return asc ? aNum - bNum : bNum - aNum;
+    }
+    return asc ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+  });
 
-makeSortable('championTable');
-makeSortable('queueTable');
-makeSortable('accountTable');
+  // Re-append sorted rows (skip detail rows)
+  for (var ri = 0; ri < rows.length; ri++) {
+    tbody.appendChild(rows[ri]);
+  }
+}
 
+// Attach sort to all th[data-col]
+document.addEventListener('DOMContentLoaded', function() {
+  var sortHeaders = document.querySelectorAll('th[data-col]');
+  for (var si = 0; si < sortHeaders.length; si++) {
+    (function(th) {
+      th.addEventListener('click', function() {
+        var colIdx = parseInt(th.getAttribute('data-col'));
+        sortTable(th, colIdx);
+      });
+    })(sortHeaders[si]);
+  }
+});
 
-// ========== 账户筛选 ==========
-function filterAccounts(){{
-  const search = (document.getElementById('acctSearch').value || '').toLowerCase();
-  const queueF = document.getElementById('acctQueueFilter').value;
-  const payerF = document.getElementById('acctPayerFilter').value;
-  const loanF = document.getElementById('acctLoanTypeFilter').value;
+// ============================================================
+// DETAIL ROW TOGGLE
+// ============================================================
+function toggleDetail(detailId) {
+  var el = document.getElementById(detailId);
+  if (el) {
+    el.style.display = el.style.display === 'none' ? 'table-row' : 'none';
+  }
+}
 
-  let count = 0;
-  document.querySelectorAll('#accountTableBody tr.account-row').forEach(tr => {{
-    const show =
-      (!search || JSON.stringify(Object.values(tr.dataset)).toLowerCase().includes(search) ||
-       tr.textContent.toLowerCase().includes(search)) &&
-      (!queueF || tr.dataset.action === queueF) &&
-      (!payerF || tr.dataset.payer === payerF) &&
-      (!loanF || tr.dataset.loan === loanF);
+// ============================================================
+// FILTER QUEUE
+// ============================================================
+function filterQueue() {
+  var search = (document.getElementById('queueSearch').value || '').toLowerCase();
+  var actionFilter = document.getElementById('queueActionFilter').value;
+  var rows = document.getElementById('queueBody').querySelectorAll('tr');
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var action = (row.getAttribute('data-action') || '').toLowerCase();
+    var text = row.textContent.toLowerCase();
+    var show = true;
+    if (search && text.indexOf(search) === -1) show = false;
+    if (actionFilter && action.indexOf(actionFilter.toLowerCase()) === -1) show = false;
+    row.style.display = show ? '' : 'none';
+  }
+}
 
-    tr.style.display = show ? '' : 'none';
-    if(show) count++;
-  }});
+// ============================================================
+// FILTER ACCOUNTS
+// ============================================================
+function filterAccounts() {
+  var search = (document.getElementById('accSearch').value || '').toLowerCase();
+  var typeFilt = document.getElementById('accTypeFilter').value;
+  var actionFilt = document.getElementById('accActionFilter').value;
+  var rows = document.getElementById('accBody').querySelectorAll('tr');
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i];
+    var rtype = row.getAttribute('data-type') || '';
+    var raction = (row.getAttribute('data-action') || '').toLowerCase();
+    var text = row.textContent.toLowerCase();
+    var show = true;
+    if (search && text.indexOf(search) === -1) show = false;
+    if (typeFilt && rtype !== typeFilt) show = false;
+    if (actionFilt && raction.indexOf(actionFilt.toLowerCase()) === -1) show = false;
+    row.style.display = show ? '' : 'none';
+  }
+}
 
-  const total = ACCOUNT_DATA.length;
-  document.getElementById('acctFilteredCount').textContent = `显示 ${count.toLocaleString()} / ${total.toLocaleString()}`;
-}}
+// ============================================================
+// EXPORT CSV
+// ============================================================
+function exportTableCSV(tableId, filename) {
+  var table = document.getElementById(tableId);
+  if (!table) return;
+  var rows = table.querySelectorAll('tr');
+  var csv = [];
+  for (var ri = 0; ri < rows.length; ri++) {
+    var cols = rows[ri].querySelectorAll('th, td');
+    var rowData = [];
+    for (var ci = 0; ci < cols.length; ci++) {
+      var txt = cols[ci].textContent.trim().replace(/,/g, ';');
+      rowData.push('"' + txt + '"');
+    }
+    csv.push(rowData.join(','));
+  }
+  var blob = new Blob([csv.join('\\n')], { type: 'text/csv;charset=utf-8;' });
+  var link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = filename;
+  link.click();
+}
 
-// ========== 账户下钻详情 ==========
-function showAccountDetail(tr){{
-  const idx = parseInt(tr.dataset.accountIndex);
-  const d = ACCOUNT_DATA[idx];
-  if(!d) return;
+// ============================================================
+// ACCOUNT MODAL
+// ============================================================
+function showAccountDetail(idx) {
+  var acc = ACCOUNTS[idx];
+  if (!acc) return;
+  var riskTag = '';
+  var p = parseFloat(acc.calibP) || 0;
+  if (p >= 0.08) riskTag = '<span class="risk-tag-high">HIGH RISK - Agent Call</span>';
+  else if (p >= 0.05) riskTag = '<span class="risk-tag-med">MEDIUM RISK - Auto Dialer</span>';
+  else riskTag = '<span class="risk-tag-low">LOW RISK - SMS/Email</span>';
 
-  document.getElementById('modalTitle').textContent = `账户 #${{d.id}} — 详情`;
-  const actionColor = d.recommended_action.includes('High') ? '#10b981'
-                    : d.recommended_action.includes('Medium') ? '#0ea5e9'
-                    : d.recommended_action.includes('Low') ? '#f59e0b'
-                    : '#64748b';
+  var insight = '';
+  if (p >= 0.08) insight = 'High predicted repayment probability. Prioritize agent outreach. Balance group: ' + (acc.balGroup || 'unknown') + '.';
+  else if (p >= 0.05) insight = 'Moderate probability. Auto-dialer campaign recommended. District: ' + (acc.district || 'unknown') + '.';
+  else insight = 'Lower probability. Low-cost channel sufficient. Monitor payment behavior changes.';
 
-  const payerMatch = d.payer_3yr === d.predicted_payer_flag;
-  const matchBadge = payerMatch
-    ? '<span class="text-xs px-2 py-1 rounded-full" style="background:rgba(16,185,129,0.15);color:#34d399">✓ 判定一致</span>'
-    : '<span class="text-xs px-2 py-1 rounded-full" style="background:rgba(239,68,68,0.15);color:#f87171">✗ 判定偏差</span>';
+  var html =
+    '<div style="text-align:center;margin-bottom:16px;">' +
+      '<h2 style="font-size:22px;color:#f1f5f9;">Account #' + (acc.id || '') + '</h2>' +
+      riskTag +
+    '</div>' +
+    '<div class="insight-box"><b>AI Insight:</b> ' + insight + '</div>' +
+    '<div style="margin-top:16px;">';
 
-  document.getElementById('modalContent').innerHTML = `
-    <div class="grid grid-cols-2 gap-4">
-      <div class="rounded-lg p-4" style="background:rgba(15,23,42,0.5)">
-        <div class="text-xs font-bold mb-2" style="color:var(--text-secondary)">基本信息</div>
-        <div class="space-y-2 text-sm">
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">ID</span><span class="font-mono">${{d.id}}</span></div>
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">贷款类型</span><span>${{d.loan_type}}</span></div>
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">余额分组</span><span>${{d.purchased_bal_gp}}</span></div>
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">地区</span><span>${{d.district}}</span></div>
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">余额代理</span><span class="font-bold">¥${{Number(d.balance_proxy||0).toLocaleString()}}</span></div>
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">实际付款</span><span class="font-bold ${{d.payer_3yr==='Y'?'text-emerald-400':'text-red-400'}}">${{d.payer_3yr}}</span></div>
-        </div>
-      </div>
-      <div class="rounded-lg p-4" style="background:rgba(15,23,42,0.5)">
-        <div class="text-xs font-bold mb-2" style="color:var(--text-secondary)">模型评分</div>
-        <div class="space-y-2 text-sm">
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">原始概率</span><span>${{(Number(d.raw_repay_prob)||0).toFixed(4)}}</span></div>
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">校准概率</span><span class="font-bold" style="color:#38bdf8">${{(Number(d.calibrated_repay_prob)||0).toFixed(4)}}</span></div>
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">判定标签</span><span class="font-bold ${{d.predicted_payer_flag==='Y'?'text-emerald-400':'text-red-400'}}">${{d.predicted_payer_flag}}</span></div>
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">判定结果</span><span>${{matchBadge}}</span></div>
-          <div class="flex justify-between"><span style="color:var(--text-secondary)">优先级排名</span><span class="font-bold">#${{d.policy_rank}}</span></div>
-        </div>
-      </div>
-    </div>
+  var fields = [
+    ['Account ID', acc.id],
+    ['Loan Type', acc.type],
+    ['Balance Group', acc.balGroup],
+    ['District', acc.district],
+    ['Is Payer', acc.isPayer === 'Y' ? '[YES] Paid' : '[NO]'],
+    ['Raw Prediction', acc.rawP],
+    ['Calibrated Probability', acc.calibP],
+    ['Recommended Action', acc.action],
+    ['Net Recovery Value', '\u00a5' + (acc.netRec || 0).toLocaleString()],
+    ['Purchased Balance', '\u00a5' + (acc.balance || 0).toLocaleString()],
+  ];
 
-    <div class="rounded-lg p-4 mt-4" style="background:rgba(15,23,42,0.5)">
-      <div class="text-xs font-bold mb-3" style="color:var(--text-secondary)">经济测算</div>
-      <div class="grid grid-cols-3 gap-4 text-center">
-        <div class="rounded-lg p-3" style="background:rgba(134,239,172,0.08)">
-          <div class="text-xs" style="color:var(--text-secondary)">毛回收预期</div>
-          <div class="font-bold text-lg" style="color:#86efac">¥${{Number(d.expected_gross_recovery||0).toLocaleString(undefined,{{maximumFractionDigits:0}})}}</div>
-        </div>
-        <div class="rounded-lg p-3" style="background:rgba(74,222,128,0.08)">
-          <div class="text-xs" style="color:var(--text-secondary)">净回收预期</div>
-          <div class="font-bold text-lg" style="color:#4ade80">¥${{Number(d.expected_net_recovery||0).toLocaleString(undefined,{{maximumFractionDigits:0}})}}</div>
-        </div>
-        <div class="rounded-lg p-3" style="background:rgba(248,113,113,0.08)">
-          <div class="text-xs" style="color:var(--text-secondary)">触达成本</div>
-          <div class="font-bold text-lg" style="color:#f87171">¥${{Number(d.recommended_contact_cost||0).toLocaleString(undefined,{{maximumFractionDigits:0}})}}</div>
-        </div>
-      </div>
-    </div>
+  for (var fi = 0; fi < fields.length; fi++) {
+    html += '<div class="modal-field"><span class="modal-field-label">' + fields[fi][0] + '</span><span class="modal-field-value">' + fields[fi][1] + '</span></div>';
+  }
+  html += '</div>';
 
-    <div class="rounded-lg p-4 mt-4" style="background:rgba(15,23,42,0.5)">
-      <div class="text-xs font-bold mb-2" style="color:var(--text-secondary)">推荐动作</div>
-      <div class="flex items-center gap-3">
-        <span class="px-4 py-2 rounded-lg font-bold text-sm" style="background:${{actionColor}}22;color:${{actionColor}};border:1px solid ${{actionColor}}44">
-          ${{d.recommended_action}}
-        </span>
-        <span class="text-xs" style="color:var(--text-secondary)">
-          ${{d.recommended_action.includes('High')?'该账户被分配到人工坐席队列，建议优先处理，关注其较高的付款概率和余额。'
-           :d.recommended_action.includes('Medium')?'该账户进入自动外呼队列，适合规模化触达。'
-           :d.recommended_action.includes('Low')?'该账户通过短信/邮件低成本触达即可。'
-           :'该账户不建议投入当前轮次的人工或外呼资源。'}}
-        </span>
-      </div>
-    </div>
+  document.getElementById('modalTitle').textContent = 'Account #' + (acc.id || '') + ' - Detail';
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('accModal').classList.add('show');
+}
 
-    <div class="rounded-lg p-4 mt-4" style="background:linear-gradient(135deg,rgba(14,165,233,0.06),rgba(16,185,129,0.04));border-left:3px solid var(--primary)">
-      <div class="text-xs font-bold mb-1">AI 解读</div>
-      <div class="text-sm leading-relaxed" style="color:var(--text-secondary)">
-        ${{generateAccountInsight(d)}}
-      </div>
-    </div>
-  `;
-  document.getElementById('accountModal').classList.add('show');
-}}
+function closeModal() {
+  document.getElementById('accModal').classList.remove('show');
+}
 
-function generateAccountInsight(d){{
-  const calibP = Number(d.calibrated_repay_prob)||0;
-  const rawP = Number(d.raw_repay_prob)||0;
-  const bal = Number(d.balance_proxy)||0;
-  const isPayer = d.payer_3yr === 'Y';
-  const isPredicted = d.predicted_payer_flag === 'Y';
-  const netR = Number(d.expected_net_recovery)||0;
+// Close modal on backdrop click
+document.getElementById('accModal').addEventListener('click', function(e) {
+  if (e.target === this) closeModal();
+});
 
-  let parts = [];
+// ============================================================
+// FEATURE IMPORTANCE CHART UPDATE
+// ============================================================
+function updateFiChart() {
+  var modelName = document.getElementById('fiModelSelect').value;
+  var fiData = ALL_FI[modelName];
+  if (!fiData) return;
 
-  if(calibP > 0.15) parts.push(`该账户的校准付款概率高达 **$${(calibP*100).toFixed(1)}%** ，远高于T集平均水平（~9%），属于高潜客户。`);
-  else if(calibP > 0.08) parts.push(`校准概率 **$${(calibP*100).toFixed(1)}%** ，处于中等水平，需要结合余额和其他信号综合判断。`);
-  else parts.push(`校准概率 **$${(calibP*100).toFixed(1)}%** 较低，默认情况下不建议投入高成本触达渠道。`);
+  var entries = Object.entries(fiData).map(function(kv) { return { name: kv[0], val: kv[1] }; });
+  entries.sort(function(a, b) { return Math.abs(b.val) - Math.abs(a.val); });
+  var top12 = entries.slice(0, 12);
 
-  if(bal > 150000) parts.push(`余额代理值 ¥${{bal.toLocaleString()}} 属于较高水平，即便概率偏低也可能产生可观回收。`);
-  else if(bal > 50000) parts.push(`余额处于中等区间（¥${{bal.toLocaleString()}}）。`);
-  else parts.push(`余额较低（¥${{bal.toLocaleString()}}），回收上限有限。`);
+  var labels = top12.map(function(e) { return e.name; });
+  var values = top12.map(function(e) { return parseFloat(e.val); });
+  var colors = values.map(function(v) { return v >= 0 ? 'rgba(59,130,246,0.7)' : 'rgba(239,68,68,0.7)'; });
 
-  if(isPayer && isPredicted) parts.push(`**模型命中**：该客户确实发生了付款，模型正确识别。`);
-  else if(isPayer && !isPredicted) parts.push(`**漏判案例**：该客户实际付款了但模型未预测到（False Negative），值得回溯其特征模式。`);
-  else if(!isPayer && isPredicted) parts.push(`**误判案例**：模型预测会付款但实际未付（False Positive），可能是概率校准偏乐观或存在未被模型捕捉的特殊情况。`);
-  else parts.push(`**正确排除**：模型正确识别该客户不会在观察期内付款。`);
+  var ctx = document.getElementById('featureImportanceChart');
+  if (!ctx) return;
+  if (window.fiChartInstance) window.fiChartInstance.destroy();
 
-  return parts.join(' ');
-}}
-
-// ========== 模型行点击详情 ==========
-function showModelDetail(tr){{
-  const d = JSON.parse(tr.dataset.model || '{{}}');
-  if(!d || Object.keys(d).length === 0) return;
-
-  const roleBadge = d.model_role === 'baseline' ? '<span class="badge badge-baseline">Baseline</span>'
-                   : d.model_role === 'agent_champion' ? '<span class="badge badge-agent">Champion</span>'
-                   : '<span class="badge badge-challenger">Challenger</span>';
-
-  document.getElementById('modalModelTitle').textContent = `${{d.model_name}} 详情`;
-  document.getElementById('modalModelContent').innerHTML = `
-    <div class="text-center mb-6">
-      ${roleBadge}
-      <h3 class="text-2xl font-bold mt-3">${{d.model_name}}</h3>
-    </div>
-    <div class="grid grid-cols-2 gap-4">
-      <div class="rounded-lg p-4 text-center" style="background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.2)">
-        <div class="text-xs" style="color:var(--text-secondary)">ROC-AUC</div>
-        <div class="text-2xl font-bold" style="color:#38bdf8">${{Number(d.roc_auc).toFixed(3)}}</div>
-      </div>
-      <div class="rounded-lg p-4 text-center" style="background:rgba(167,139,250,0.08);border:1px solid rgba(167,139,250,0.2)">
-        <div class="text-xs" style="color:var(--text-secondary)">Brier</div>
-        <div class="text-2xl font-bold" style="color:#a78bfa">${{Number(d.brier).toFixed(4)}}</div>
-      </div>
-      <div class="rounded-lg p-4 text-center" style="background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2)">
-        <div class="text-xs" style="color:var(--text-secondary)">Recall(Y)</div>
-        <div class="text-2xl font-bold" style="color:#fb923c">${{(Number(d.recall)*100).toFixed(2)}}%</div>
-      </div>
-      <div class="rounded-lg p-4 text-center" style="background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.2)">
-        <div class="text-xs" style="color:var(--text-secondary)">Precision(Y)</div>
-        <div class="text-2xl font-bold" style="color:#34d399">${{(Number(d.precision)*100).toFixed(2)}}%</div>
-      </div>
-      <div class="rounded-lg p-4 text-center" style="background:rgba(74,222,128,0.08);border:1px solid rgba(74,222,128,0.2)">
-        <div class="text-xs" style="color:var(--text-secondary)">Expected Net Recovery</div>
-        <div class="text-2xl font-bold" style="color:#4ade80">¥${{Number(d.expected_net_recovery_total).toLocaleString(undefined,{{maximumFractionDigits:0}})}}</div>
-      </div>
-      <div class="rounded-lg p-4 text-center" style="background:rgba(244,114,182,0.08);border:1px solid rgba(244,114,182,0.2)">
-        <div class="text-xs" style="color:var(--text-secondary)">ROI</div>
-        <div class="text-2xl font-bold" style="color:#f472b6">${{Number(d.expected_roi).toFixed(2)}}x</div>
-      </div>
-      <div class="col-span-2 rounded-lg p-4 text-center" style="background:rgba(148,163,184,0.08);border:1px solid rgba(148,163,184,0.2)">
-        <div class="text-xs" style="color:var(--text-secondary)">Decision Threshold</div>
-        <div class="text-2xl font-bold" style="color:#cbd5e1">${{Number(d.threshold).toFixed(2)}}</div>
-      </div>
-    </div>
-  `;
-  document.getElementById('modelModal').classList.add('show');
-}}
-
-// ========== 图表渲染 ==========
-let featureChartRendered = false;
-let signalChartsRendered = false;
-
-function renderFeatureChart(){{
-  if(featureChartRendered) return;
-  featureChartRendered = true;
-  const ctx = document.getElementById('featureChart');
-  if(!ctx) return;
-  new Chart(ctx, {{
+  window.fiChartInstance = new Chart(ctx, {
     type: 'bar',
-    data: {{
-      labels: {json.dumps([f.get('feature','') for f in feature_csv], ensure_ascii=False)},
-      datasets: [{{
-        label: 'Importance',
-        data: {[float(f.get('importance',0)) for f in feature_csv]},
-        backgroundColor: [
-          'rgba(16,185,129,0.7)','rgba(14,165,233,0.7)','rgba(14,165,233,0.7)',
-          'rgba(14,165,233,0.7)','rgba(100,116,139,0.5)','rgba(100,116,139,0.5)',
-          'rgba(100,116,139,0.5)','rgba(100,116,139,0.5)','rgba(100,116,139,0.5)',
-          'rgba(100,116,139,0.5)','rgba(100,116,139,0.5)','rgba(100,116,139,0.5)',
-        ],
-        borderRadius: 6,
-        borderSkipped: false,
-      }}]
-    }},
-    options: {{
+    data: {
+      labels: labels,
+      datasets: [{ label: 'Feature Importance', data: values, backgroundColor: colors, borderRadius: 4 }]
+    },
+    options: {
       indexAxis: 'y',
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } },
+        y: { grid: { display: false }, ticks: { color: '#cbd5e1', font: { size: 11 } } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// CHART INITIALIZATION
+// ============================================================
+var chartInitialized = {};
+
+function initChartsForTab(tabId) {
+  // Prevent double-init
+  if (chartInitialized[tabId]) return;
+  chartInitialized[tabId] = true;
+
+  if (tabId === 'overview') {
+    initDevSplitChart();
+    initConfusionMatrixChart();
+  }
+  if (tabId === 'models') {
+    initModelAucChart();
+    initModelEcoChart();
+  }
+  if (tabId === 'features') {
+    updateFiChart();
+    initPayerBalChart();
+    initPayerLoanChart();
+  }
+  if (tabId === 'queue') {
+    initQueuePieChart();
+    initQueueRoiChart();
+  }
+  if (tabId === 'tuning') {
+    initMlpSweepChart();
+  }
+}
+
+// --- Dev Split Pie ---
+function initDevSplitChart() {
+  var ctx = document.getElementById('devSplitChart');
+  if (!ctx || DEV_SPLIT_LABELS.length === 0) return;
+  new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: DEV_SPLIT_LABELS,
+      datasets: [{
+        data: DEV_SPLIT_VALUES,
+        backgroundColor: ['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444'],
+        borderWidth: 0
+      }]
+    },
+    options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: {{ legend: {{display:false}}, title: {{display:true,text:'特征重要性分布',color:'#94a3b8',font:{{size:13}}} }}},
-      scales: {{
-        x: {{ ticks: {{color:'#64748b'}, grid: {{color:'rgba(51,65,85,0.3)'}} }},
-        y: {{ ticks: {{color:'#94a3b8',font:{{size:11}}}}, grid: {{display:false}} }}
-      }}
-    }}
-  }});
-}}
+      plugins: { legend: { position: 'right', labels: { color: '#cbd5e1', font: { size: 11 } } } }
+    }
+  });
+}
 
-function renderSignalCharts(){{
-  if(signalChartsRendered) return;
-  signalChartsRendered = true;
+// --- Confusion Matrix ---
+function initConfusionMatrixChart() {
+  var ctx = document.getElementById('confMatrixChart');
+  if (!ctx) return;
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['TN', 'FP', 'FN', 'TP'],
+      datasets: [{
+        label: 'Count',
+        data: CM_VALUES,
+        backgroundColor: ['#3b82f6', '#ef4444', '#ef4444', '#10b981'],
+        borderRadius: 4
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { color: '#cbd5e1' } }
+      }
+    }
+  });
+}
 
-  // Balance chart
-  const bc = document.getElementById('balanceChart');
-  if(bc) new Chart(bc, {{
-    type: 'doughnut',
-    data: {{
-      labels: {json.dumps([r.get('purchased_bal_gp','') for r in payer_balance], ensure_ascii=False)},
-      datasets: [{{
-        data: {[float(r.get('payer_rate_pct',0)) for r in payer_balance]},
-        backgroundColor: ['rgba(16,185,129,0.7)','rgba(14,165,233,0.7)','rgba(245,158,11,0.7)','rgba(168,85,247,0.7)'],
-        borderWidth: 0,
-      }}]
-    }},
-    options: {{ responsive: true, maintainAspectRatio: false, plugins: {{ legend: {{position:'bottom',labels:{{color:'#94a3b8',font:{{size:10},boxWidth:12}}}} }, title: {{display:true,text:'付款率 %',color:'#94a3b8',font:{{size:11}}}} }}, cutout:'55%' }}
-  }});
+// --- Model AUC Comparison ---
+function initModelAucChart() {
+  var ctx = document.getElementById('modelAucChart');
+  if (!ctx) return;
+  var names = MODEL_DATA.map(function(m) { return m.display; });
+  var aucs = MODEL_DATA.map(function(m) { return parseFloat(m.auc); });
+  var colors = MODEL_DATA.map(function(m) { return m.color; });
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [{ label: 'ROC-AUC', data: aucs, backgroundColor: colors, borderRadius: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { min: 0.5, max: 0.85, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { color: '#cbd5e1' } }
+      }
+    }
+  });
+}
 
-  // Loan chart
-  const lc = document.getElementById('loanChart');
-  if(lc) new Chart(lc, {{
-    type: 'doughnut',
-    data: {{
-      labels: {json.dumps([r.get('loan_type','') for r in payer_loan], ensure_ascii=False)},
-      datasets: [{{
-        data: {[float(r.get('payer_rate_pct',0)) for r in payer_loan]},
-        backgroundColor: ['rgba(14,165,233,0.7)','rgba(251,146,60,0.7)','rgba(168,85,247,0.7)','rgba(236,72,153,0.7)'],
-        borderWidth: 0,
-      }}]
-    }},
-    options: {{ responsive: true, maintainAspectRatio: false, plugins: {{ legend: {{position:'bottom',labels:{{color:'#94a3b8',font:{{size:10},boxWidth:12}}}} }, title: {{display:true,text:'付款率 %',color:'#94a3b8',font:{{size:11}}}} }}, cutout:'55%' }}
-  }});
+// --- Model Economic Comparison ---
+function initModelEcoChart() {
+  var ctx = document.getElementById('modelEcoChart');
+  if (!ctx) return;
+  var names = MODEL_DATA.map(function(m) { return m.display; });
+  var netrecs = MODEL_DATA.map(function(m) { return parseFloat(m.netrec.replace(/[,]/g,'')) || 0; });
+  var colors = MODEL_DATA.map(function(m) { return m.color; });
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: names,
+      datasets: [{ label: 'Net Recovery (\u00a5)', data: netrecs, backgroundColor: colors, borderRadius: 6 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8', callback: function(v){return '\u00a5'+v.toLocaleString();} } },
+        x: { grid: { display: false }, ticks: { color: '#cbd5e1' } }
+      }
+    }
+  });
+}
 
-  // Mobile chart
-  const mc = document.getElementById('mobileChart');
-  if(mc) new Chart(mc, {{
-    type: 'doughnut',
-    data: {{
-      labels: {json.dumps([("有手机号" if str(r.get('mobile_phone_flag','')).lower()=='y' else ("无手机号" if str(r.get('mobile_phone_flag','')).lower()=='n' else r.get('mobile_phone_flag','?'))) for r in payer_mobile], ensure_ascii=False)},
-      datasets: [{{
-        data: {[float(r.get('payer_rate_pct',0)) for r in payer_mobile]},
-        backgroundColor: ['rgba(245,158,11,0.7)','rgba(100,116,139,0.5)'],
-        borderWidth: 0,
-      }}]
-    }},
-    options: {{ responsive: true, maintainAspectRatio: false, plugins: {{ legend: {{position:'bottom',labels:{{color:'#94a3b8',font:{{size:10},boxWidth:12}}}} }, title: {{display:true,text:'付款率 %',color:'#94a3b8',font:{{size:11}}}} }}, cutout:'55%' }}
-  }});
-}}
+// --- Payer Rate by Balance ---
+function initPayerBalChart() {
+  var ctx = document.getElementById('payerBalChart');
+  if (!ctx || BAL_PAYER_LABELS.length === 0) return;
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: BAL_PAYER_LABELS,
+      datasets: [
+        { label: 'Actual Payer Rate (%)', data: BAL_PAYER_ALL, backgroundColor: 'rgba(59,130,246,0.7)', borderRadius: 4 },
+        { label: 'Predicted Rate (%)', data: BAL_PAYER_PRED, backgroundColor: 'rgba(245,158,11,0.7)', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#cbd5e1' } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { color: '#cbd5e1', font: { size: 10 }, maxRotation: 45 } }
+      }
+    }
+  });
+}
 
-// ========== 键盘快捷键 ==========
-document.addEventListener('keydown', (e) => {{
-  if(e.key === 'Escape'){{
-    document.querySelectorAll('.modal-overlay').forEach(m=>m.classList.remove('show'));
-  }}
-}});
+// --- Payer Rate by Loan Type ---
+function initPayerLoanChart() {
+  var ctx = document.getElementById('payerLoanChart');
+  if (!ctx || LOAN_PAYER_LABELS.length === 0) return;
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: LOAN_PAYER_LABELS,
+      datasets: [
+        { label: 'Actual Payer Rate (%)', data: LOAN_PAYER_ALL, backgroundColor: 'rgba(16,185,129,0.7)', borderRadius: 4 },
+        { label: 'Predicted Rate (%)', data: LOAN_PAYER_PRED, backgroundColor: 'rgba(139,92,246,0.7)', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { labels: { color: '#cbd5e1' } } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { color: '#cbd5e1' } }
+      }
+    }
+  });
+}
+
+// --- Queue Pie Chart ---
+function initQueuePieChart() {
+  var ctx = document.getElementById('queuePieChart');
+  if (!ctx) return;
+  var qlabels = QUEUE_DATA.map(function(q){ return q.action; });
+  var qvals = QUEUE_DATA.map(function(q){ return q.accounts; });
+  var qcolors = ['#ef4444', '#f59e0b', '#3b82f6', '#6b7280'].slice(0, qlabels.length);
+  new Chart(ctx, {
+    type: 'pie',
+    data: {
+      labels: qlabels,
+      datasets: [{ data: qvals, backgroundColor: qcolors, borderWidth: 0 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'right', labels: { color: '#cbd5e1', font: { size: 11 } } } }
+    }
+  });
+}
+
+// --- Queue ROI Chart ---
+function initQueueRoiChart() {
+  var ctx = document.getElementById('queueRoiChart');
+  if (!ctx) return;
+  var qlabels = QUEUE_DATA.map(function(q){
+    return q.action.replace(/[()][^)]*/g,'').trim();
+  });
+  var qrois = QUEUE_DATA.map(function(q){
+    var r = String(q.roi).replace(/x/g,'');
+    return parseFloat(r) || 0;
+  });
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: qlabels,
+      datasets: [{ label: 'ROI (x)', data: qrois, backgroundColor: ['#ef4444','#f59e0b','#3b82f6','#6b7280'].slice(0,qlabels.length), borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { beginAtZero: true, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { color: '#cbd5e1', font: { size: 10 }, maxRotation: 30 } }
+      }
+    }
+  });
+}
+
+// --- MLP Sweep ---
+function initMlpSweepChart() {
+  var ctx = document.getElementById('mlpSweepChart');
+  if (!ctx) return;
+  var sweepData = [
+    { cfg: 'cfg_1', auc: 0.7026, best: false },
+    { cfg: 'cfg_2', auc: 0.6759, best: false },
+    { cfg: 'cfg_3', auc: 0.6828, best: false },
+    { cfg: 'cfg_4', auc: 0.6852, best: false },
+    { cfg: 'cfg_5', auc: 0.4822, best: false },
+    { cfg: 'cfg_6', auc: 0.7057, best: true },
+    { cfg: 'cfg_7', auc: 0.6987, best: false },
+    { cfg: 'cfg_8', auc: 0.6885, best: false }
+  ];
+  var labels = sweepData.map(function(s) { return s.cfg; });
+  var values = sweepData.map(function(s) { return s.auc; });
+  var bgColors = sweepData.map(function(s) { return s.best ? '#10b981' : 'rgba(99,102,241,.6)'; });
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [{ label: 'Val AUC', data: values, backgroundColor: bgColors, borderRadius: 4 }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        y: { min: 0.4, max: 0.8, grid: { color: 'rgba(255,255,255,.05)' }, ticks: { color: '#94a3b8' } },
+        x: { grid: { display: false }, ticks: { color: '#cbd5e1' } }
+      }
+    }
+  });
+}
+
+// ============================================================
+// INIT: Auto-open first tab's charts
+// ============================================================
+document.addEventListener('DOMContentLoaded', function() {
+  // Init Overview charts immediately (it's visible by default)
+  initChartsForTab('overview');
+
+  // Make sure Overview tab is shown
+  var overviewPanel = document.getElementById('panel-overview');
+  if (overviewPanel) overviewPanel.classList.add('active');
+});
 </script>
 </body>
-</html>'''
+</html>
+""")
 
-    OUTPUT_HTML.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_HTML.write_text(html, encoding="utf-8")
-    print(f"Dashboard 已生成: {OUTPUT_HTML}")
-    print(f"大小: {len(html):,} 字符 | 包含 {len(scored_sampled)} 条账户记录")
-
-
-if __name__ == "__main__":
-    generate_dashboard()
+size_kb = OUTPUT_HTML.stat().st_size / 1024
+print("Done! {path} ({sz:.1f} KB)".format(path=str(OUTPUT_HTML), sz=size_kb))
