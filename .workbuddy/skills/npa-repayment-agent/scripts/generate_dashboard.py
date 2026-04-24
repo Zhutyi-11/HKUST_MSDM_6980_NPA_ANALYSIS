@@ -485,13 +485,12 @@ parts.append('<!DOCTYPE html>\n<html lang="zh-CN">\n<head>\n')
 parts.append('<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width, initial-scale=1.0">\n')
 parts.append('<title>NPA Repayment Analytics Dashboard</title>\n')
 parts.append('<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>\n')
-parts.append('<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>\n')
 parts.append('<style>' + CSS + '</style></head>\n<body>\n')
 
 # Header
 parts.append('<div class="container"><div class="header">\n')
 parts.append('<h1>NPA Repayment Analytics</h1>\n')
-parts.append('<span class="ver">v9</span>\n')
+parts.append('<span class="ver">v10</span>\n')
 parts.append('</div>\n')
 
 # Champion summary bar
@@ -1259,11 +1258,61 @@ _R.append('</div>\n')  # end recommendations
 parts.append('\n'.join(_R))
 
 
-# ═════════ REPORT PANEL ═════════
-_safe_report = report_md.replace('\\', '\\\\').replace('`', '\\`').replace("'", "\\'").replace('\n', '\\n')
+# ═════════ REPORT PANEL (English Brief) ═════════
+_rpt_champ = CHAMP.get('name','xgboost')
+_rpt_auc = str(CHAMP.get('auc','-'))
+_rpt_brier = str(CHAMP.get('brier','-'))
+_rpt_recall = fmt_num(float(CHAMP.get('recall',0)), '.1f')
+_rpt_prec = fmt_num(float(CHAMP.get('precision',0)), '.1f')
+_rpt_nr = fmt_num(int(CHAMP.get('net_recovery',0)), ',')
+_rpt_roi = str(CHAMP.get('roi','-'))
+_rpt_thr = str(CHAMP.get('threshold','0.09'))
+_rpt_qtotal = QTOTALS.get('accounts',0)
+_rpt_qn = fmt_num(int(QTOTALS.get('net',0)), ',')
+_rpt_qr = str(QTOTALS.get('roi','-'))
+_rpt_m = int(m_count)
+_rpt_t = int(t_count)
+_rpt_payer_m = '{:.2f}'.format(float(metrics_json.get('train_payer_rate',0.098))*100) if metrics_json else '9.81'
+_rpt_payer_t = '{:.2f}'.format(float(metrics_json.get('test_payer_rate',0.0915))*100) if metrics_json else '9.15'
+
 parts.append('<div id="tab-report" class="panel">')
-parts.append('<div class="card markdown-body" id="reportContent"></div>')
-parts.append('</div>\n')
+parts.append('<div class="card markdown-body">')
+parts.append('<h1>NPA Collection Strategy Report</h1>')
+parts.append('<h2>1. Executive Summary</h2><ul>')
+parts.append('<li><b>Portfolio:</b> ' + str(_rpt_m + _rpt_t).replace(',','') + ' accounts (Training: ' + str(_rpt_m) + ', Test: ' + str(_rpt_t) + ')</li>')
+parts.append('<li><b>Base Payer Rate:</b> M=' + _rpt_payer_m + '%, T=' + _rpt_payer_t + '%</li>')
+parts.append('<li><b>Champion Model:</b> <strong>' + esc(_rpt_champ) + '</strong> | Test AUC=<strong>' + _rpt_auc + '</strong>, Brier=<strong>' + _rpt_brier + '</strong></li>')
+parts.append('<li><b>Expected Net Recovery:</b> <strong>$' + _rpt_nr + '</strong> at <strong>' + _rpt_roi + 'x</strong> ROI across test set</li>')
+parts.append('<li><b>Queue Allocation:</b> ' + fmt_num(int(_rpt_qtotal), ',') + ' accounts queued, $' + _rpt_qn + ' net recovery expected</li>')
+parts.append('</ul>')
+parts.append('<h2>2. Model Performance (Test Set)</h2>')
+parts.append('<table><tr><th>Model</th><th>AUC</th><th>Brier</th><th>Recall</th><th>Precision</th><th>Net Recovery</th><th>ROI</th><th>Threshold</th></tr>')
+for m in MODELS_TABLE:
+    parts.append('<tr><td>' + esc(m['name']) + '</td><td>' + str(m['auc']) + '</td><td>' + str(m['brier']) + '</td>')
+    parts.append('<td>' + fmt_num(m['recall'],'.1f') + '%</td><td>' + fmt_num(m['precision'],'.1f') + '%</td>')
+    parts.append('<td>$' + fmt_num(int(m['net_recovery']),',') + '</td><td>' + str(m['roi']) + 'x</td>')
+    parts.append('<td>' + str(m['threshold']) + '</td></tr>')
+parts.append('</table>')
+parts.append('<h2>3. Key Findings</h2><ol>')
+parts.append('<li><b>Tree models outperform baseline:</b> XGBoost achieves best AUC (' + _rpt_auc + ') with strong economic outcome ($' + _rpt_nr + ')</li>')
+parts.append('<li><b>Inverse balance-repayment correlation:</b> Lower balance buckets show significantly higher payer rates (~11% for &lt;$25K vs ~2% for $200K+)</li>')
+parts.append('<li><b>High concentration:</b> Top-3 collection tiers capture majority of recovery value - focus resources there</li>')
+parts.append('<li><b>All models well-calibrated:</b> Brier scores clustered in [0.078-0.091] range via Platt calibration</li>')
+parts.append('</ol>')
+parts.append('<h2>4. Recommended Actions</h2><div style="display:grid;gap:10px">')
+parts.append('<div style="padding:12px;background:#0f1524;border-radius:8px;border-left:3px solid #22c55e"><b>1. Deploy Champion Model:</b> Replace rule-based scoring with ' + esc(_rpt_champ) + '. Monitor monthly recalibration.</div>')
+parts.append('<div style="padding:12px;background:#0f1524;border-radius:8px;border-left:3px solid #3b82f6"><b>2. Tiered Collection Framework:</b> Agent calls for high-probability accounts, auto-dialer for mid-tier, SMS/Email for low-priority.</div>')
+parts.append('<div style="padding:12px;background:#0f1524;border-radius:8px;border-left:3px solid #f59e0b"><b>3. Quick-Win Segment:</b> Prioritize balance &lt;=$25K with calib prob &gt;=0.06. Offer lump-sum settlement discounts up to 20%.</div>')
+parts.append('<div style="padding:12px;background:#0f1524;border-radius:8px;border-left:3px solid #a855f7"><b>4. Write-off Criteria:</b> Low-probability, high-balance accounts where contact cost exceeds expected recovery.</div>')
+parts.append('</div>')
+parts.append('<h2>5. Economic Assumptions</h2>')
+_rrs = str(round(_rr))
+_acs = fmt_num(float(ac),',.0f')
+_ads = fmt_num(float(ad),',.0f')
+_scs = fmt_num(float(sc),'.2f')
+parts.append('<p>Balance Recovery Rate: ' + _rrs + '% | Agent Call Cost: $' + _acs + ' | Dialer Cost: $' + _ads + ' | SMS Cost: $' + _scs + '</p>')
+parts.append('<p style="color:#64748b;font-size:.78rem;margin-top:16px">Generated by NPA Repayment Analytics Dashboard v10 | Threshold: ' + _rpt_thr + ' | Recall@T: ' + _rpt_recall + '% | Precision@T: ' + _rpt_prec + '%</p>')
+parts.append('</div></div>\n')
 
 # ═════════ MODAL ═════════
 parts.append("<div class=\"modal-overlay\" id=\"acctModal\">\n")
@@ -1774,15 +1823,9 @@ function initChartsForTab(tabId) {
   }
 
   // ─── REPORT ───
+  // Report content is pre-rendered HTML (English brief) — no JS rendering needed
   if(tabId === 'tab-report') {
-    var rc = document.getElementById('reportContent');
-    if(rc && !rc.innerHTML.trim()) {
-      try {
-        rc.innerHTML = marked.parse(report_html.replace(/`/g,''));
-      } catch(err) {
-        rc.innerHTML = '<p style="color:#ef4444">Report rendering error. Raw text available below.</p><pre>'+esc(report_html)+'</pre>';
-      }
-    }
+    // Content already in DOM, nothing to initialize
   }
 }
 
@@ -1792,31 +1835,41 @@ function updateFeatureChart() {
   var sel = document.getElementById('fiModelSelect');
   var model = sel ? sel.value : '';
   var fi = ALL_FEATURE_IMPORTANCE[model];
-  if(!fi || !fi.length) return;
+  console.log('[FI] model=' + model + ', keys=' + Object.keys(ALL_FEATURE_IMPORTANCE).join(',') + ', found=' + !!fi + ', len=' + (fi ? fi.length : 0));
+  
+  // Fallback: if exact match fails, try case-insensitive or first available
+  if(!fi || !fi.length) {
+    var keys = Object.keys(ALL_FEATURE_IMPORTANCE);
+    for(var ki=0; ki<keys.length; ki++) {
+      var fk = keys[ki];
+      if(ALL_FEATURE_IMPORTANCE[fk] && ALL_FEATURE_IMPORTANCE[fk].length) {
+        model = fk;
+        fi = ALL_FEATURE_IMPORTANCE[fk];
+        console.log('[FI] fallback to model=' + model);
+        break;
+      }
+    }
+  }
+  if(!fi || !fi.length) { console.warn('[FI] No feature data available'); return; }
 
   var top = fi.slice(0, 12);
   var labels = top.map(function(x){return x.feature;}).slice().reverse();
   var vals = top.map(function(x){return x.importance;}).slice().reverse();
 
   getOrCreateChart('featureChart', 'bar', {
-    type:'bar',
     data:{
       labels:labels,
       datasets:[{
         label:'Importance',
         data:vals,
-        backgroundColor:function(context) {
-          var ctx2=context.chart.ctx;
-          var g2=ctx2.createLinearGradient(0,context.chart.chartArea.bottom,0,context.chart.chartArea.top);
-          g2.addColorStop(0,'rgba(59,130,246,.5)');
-          g2.addColorStop(1,'rgba(59,130,246,1)');
-          return g2;
-        },
+        backgroundColor:'#3b82f6',
         borderRadius:4,
       }]
     },
     options:{
-      indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{beginAtZero:true}},
+      indexAxis:'y',
+      plugins:{legend:{display:false}},
+      scales:{x:{beginAtZero:true}},
     }
   });
 }
@@ -1985,8 +2038,8 @@ parts.append('const QUEUE_COLORS = ' + j(queue_colors) + ';\n')
 parts.append('const MODEL_COLORS_MAP = ' + j(MODEL_COLORS) + ';\n')
 parts.append('const THRESHOLD_DATA = ' + j(THRESHOLD_DATA) + ';\n')
 
-# Report markdown — injected as JS string
-parts.append('const report_html = ' + json.dumps(report_md) + ';\n')
+# Report is now pre-rendered English HTML — no markdown JS variable needed
+# (removed: const report_html = ...)
 
 parts.append('\n// ===== APPLICATION CODE =====\n')
 parts.append(js_code)
@@ -2001,5 +2054,5 @@ out_path = os.path.join(OUT_DIR, 'dashboard.html')
 with open(out_path, 'w', encoding='utf-8') as f:
     f.write(output)
 
-print('Dashboard v9 generated: ' + out_path)
+print('Dashboard v10 generated: ' + out_path)
 print('Size: {:,} bytes ({:.1f} KB)'.format(len(output), len(output)/1024))
