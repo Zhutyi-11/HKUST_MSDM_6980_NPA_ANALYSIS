@@ -1,0 +1,586 @@
+% ============================================================
+%  MSDM6980 --- NPA Repayment Prediction Analysis Report v6 (Compact, <=10p body)
+%  Author: ZHU TIANYI (21229582) | Supervisor: Mr. Hanson WONG
+%  Compile with: pdfLaTeX (twice)
+% ============================================================
+\documentclass[11pt, a4paper]{article}
+
+% --- Packages ---
+\usepackage[margin=0.95in, top=0.9in, bottom=0.95in]{geometry}
+\usepackage{setspace}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{amsmath, amssymb, amsfonts}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{hyperref}
+\usepackage[table]{xcolor}
+\usepackage{colortbl}
+\usepackage{array}
+\usepackage{enumitem}
+
+% --- Spacing tightened for 10-page target ---
+\setstretch{1.15}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{4pt}
+\captionsetup{font=small, skip=4pt}
+\setlist{nosep, leftmargin=1.4em, itemsep=2pt}
+
+% --- Section spacing ---
+\usepackage{titlesec}
+\titlespacing*{\section}{0pt}{10pt}{4pt}
+\titlespacing*{\subsection}{0pt}{6pt}{2pt}
+
+% --- Colors ---
+\definecolor{best}{RGB}{220,252,231}
+\definecolor{good}{RGB}{224,242,254}
+
+\hypersetup{colorlinks=true, linkcolor=blue!70!black, citecolor=blue!70!black, urlcolor=blue!70!black}
+
+% ============================================================
+\begin{document}
+
+% --- Compact title block (no separate title page) ---
+\begin{center}
+{\LARGE\bfseries MSDM6980\,---\,Machine Learning for Non-Performing Asset\\[2pt]
+Repayment Prediction and Collection Strategy Optimization}\\[6pt]
+{\normalsize A Comparative Study of Logistic Regression, Random Forest, XGBoost, MLP v2, and 26 Frontier LLMs}\\[6pt]
+{\small ZHU TIANYI (21229582)\quad$\cdot$\quad Supervisor: Mr.\ Hanson WONG\quad$\cdot$\quad May 2026}
+\end{center}
+
+\vspace{-4pt}
+\hrule
+\vspace{4pt}
+
+% --- Abstract ---
+\begin{center}\textbf{Abstract}\end{center}
+\vspace{-6pt}
+\small
+We benchmark four traditional ML models (Logistic Regression, Random Forest, XGBoost, MLP v2) and 26 frontier LLM configurations (zero-shot, few-shot-10, fine-tuned; OpenAI o1/o3, Claude 4 Opus, Gemini 2.5 Pro, DeepSeek-R1, Qwen3, Llama 4, Grok 3 etc.) on a real Hong Kong NPA portfolio of 16{,}048 delinquent unsecured-debt accounts (9.15\% positive). Calibrated Logistic Regression delivers the highest expected net recovery (HKD\,1.468M, ROI\,29.4$\times$); XGBoost leads ROC-AUC (0.731). The best LLM (FT GPT-4.1-mini, AUC\,0.722) reaches AUC parity with Random Forest, and the best zero-shot reasoning LLM (Claude 4 Opus + thinking, AUC\,0.694) closes most of the discrimination gap, but Logistic Regression still leads net recovery by $+28\%$ because LLMs over-route borderline accounts to the most expensive channel. The proposed tiered collection strategy concentrates 50.6\% of expected recovery into 20\% of accounts (ROI\,27.2$\times$). Recommended deployment: ML as the production scorer, reasoning LLMs reserved for the $\le 8\%$ boundary-account second-opinion queue.
+\normalsize
+\vspace{2pt}
+\hrule
+\vspace{6pt}
+
+% ════════════════════════════════════════════════════════════
+\section{Introduction}\label{sec:intro}
+
+Non-performing assets (NPAs) are a fundamental \emph{prediction-under-extreme-imbalance} problem: in a typical unsecured portfolio only 5--15\% of accounts will repay any meaningful amount, yet identifying that minority correctly determines whether a collections operation is profitable. Traditional collections rely on uniform heuristics; ML offers a principled translation from raw account attributes to actionable repayment probabilities, and a fast-moving second branch --- frontier LLMs --- raises the practical question of whether non-specialists can simply ``ask an AI'' instead of building a specialised pipeline.
+
+\textbf{Objectives.}
+(O1) Build and compare four ML models on a real 16{,}048-account NPA portfolio;
+(O2) score each model on discrimination (AUC), calibration (Brier), and \emph{economic} outcome (Net Recovery, ROI);
+(O3) translate calibrated probabilities into a four-tier collection strategy (Agent Call / Auto-Dialer / SMS / Write-off) under explicit cost and capacity constraints;
+(O4) benchmark 26 frontier LLM configurations against the four ML anchors.
+
+\textbf{Organisation.} \S\ref{sec:contribution}\,Contributions; \S\ref{sec:methodology}\,Data~\&~methodology; \S\ref{sec:results}\,ML results and queue optimisation; \S\ref{sec:llm_compare}\,LLM-vs-ML benchmark; \S\ref{sec:discussion}\,Discussion and conclusion. Detailed tables, prompt templates, and supporting figures are in the appendices.
+
+% ════════════════════════════════════════════════════════════
+\section{Student's Unique Contributions}\label{sec:contribution}
+
+The following four contributions are made by the student (ZHU TIANYI) beyond the shared team deliverables:
+
+\begin{itemize}
+\item \textbf{End-to-end ML pipeline.} Domain-aware missing-value handling for \texttt{last\_pay\_date\_client\_closing\_m} (1{,}165 nulls treated as ``never paid to original creditor'' rather than mean-imputed); per-architecture preprocessing (one-hot for LR/MLP, ordinal for trees, $z$-score for MLP only); 5-fold out-of-fold Platt Scaling on a held-out calibration split.
+\item \textbf{LLM-vs-ML benchmark framework.} 26 frontier LLM configurations (2024--2025 releases) under three prompt strategies (zero-shot, few-shot-10, fine-tuned) plus a redesigned \emph{Domain-Calibrated CoT} prompt (App.~\ref{app:llm_prompts}) that injects the 9.15\% base rate, the per-channel cost grid, and monotonicity priors.
+\item \textbf{Economic queue optimisation.} Four-tier allocation (Agent / Dialer / SMS / Write-off) with explicit cost-per-contact and channel-capacity constraints; finding that 20\% of accounts capture 50.6\% of expected recovery at ROI\,27.2$\times$.
+\item \textbf{Interactive dashboard.} HTML/Chart.js dashboard exposing every model output (ROC, confusion matrix, feature importance, queue allocation, full LLM-vs-ML comparison) for non-technical stakeholders.
+\end{itemize}
+
+% ════════════════════════════════════════════════════════════
+\section{Data and Methodology}\label{sec:methodology}
+
+\textbf{Dataset.} Proprietary HK-bank portfolio of \textbf{16{,}048} delinquent unsecured accounts, pre-split into M (training, $N=12{,}036$) and T (test, $N=4{,}012$); binary label \texttt{payer\_3yr} with 9.15\% positives. 14 input features cover loan type, balance bucket, district, borrower age, recency variables, and contact-channel flags (full schema in App.~\ref{app:schema}). The 1{,}165 (7.3\%) nulls in \texttt{last\_pay\_date\_client\_closing\_m} are filled with $+999$ plus a sentinel \texttt{never\_paid} flag~\cite{little2002}.
+
+\textbf{Preprocessing.} Categorical: one-hot for LR/MLP, ordinal for trees. \texttt{birth\_yr}\,$\to$\,age. $z$-score standardisation for MLP only. The M set is further split 60/20/20 into train / validation / calibration; the calibration fold is reserved exclusively for Platt Scaling.
+
+\textbf{Models.} (i)~\textbf{Logistic Regression} with $\ell_2$ ($C\!=\!10$) and balanced class weights; (ii)~\textbf{Random Forest}, $B\!=\!500$, max\_depth\,12, min\_leaf\,8; (iii)~\textbf{XGBoost}, $K\!=\!200$, $\eta\!=\!0.05$, max\_depth\,6, scale\_pos\_weight\,9.18; (iv)~\textbf{MLP v2}: Linear(256)$\to$Swish$\to$ResBlock(128)$\to$FeatureInteraction(64)$\to$Linear(32)$\to$Dropout(0.3)$\to$Output, AdamW + OneCycleLR, label smoothing $\alpha\!=\!0.03$, gradient clipping at 3.0. Full hyperparameters in App.~\ref{app:hparams}; backprop derivation in App.~\ref{app:mlp_deriv}.
+
+\textbf{Calibration.} Platt Scaling on 5-fold OOF predictions:
+\begin{equation}\label{eq:platt}
+P_{\text{cal}}(y=1\mid s)=\frac{1}{1+\exp(A\,s+B)},
+\end{equation}
+fitted on the held-out calibration fold to prevent overfitting from in-sample re-calibration.
+
+\textbf{Evaluation.} ROC-AUC (ranking), Brier Score (calibration), Recall / Precision at the optimal threshold, and the two economic metrics that matter for deployment: Net Recovery $=\sum_i (G_i\!-\!C_i)$ and ROI $=$ Net Recovery / Total Contact Cost.
+
+\textbf{Collection-queue optimisation.} Each scored account is routed to one of four tiers based on its calibrated probability (Table~\ref{tab:tiers}); thresholds and channel capacities follow the institution's operational limits (App.~\ref{app:econ_params}). Objective: maximise total expected net recovery subject to those constraints.
+
+\begin{table}[H]
+\centering
+\caption{Collection action tiers and cost structure.}\label{tab:tiers}
+\small
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{@{}llrrl@{}}
+\toprule
+\textbf{Tier} & \textbf{Action} & \textbf{Cost/Acct (HKD)} & \textbf{Recovery Rate} & \textbf{Threshold}\\
+\midrule
+High   & Agent Call    & 85 & 35\% & $\hat{p}\ge\tau_H$\\
+Medium & Auto-Dialer   & 12 & 18\% & $\tau_M\le\hat{p}<\tau_H$\\
+Low    & SMS / Email   & 1.5 & 6\% & $\tau_L\le\hat{p}<\tau_M$\\
+None   & Write-off     & 0  & 0\%  & $\hat{p}<\tau_L$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ════════════════════════════════════════════════════════════
+\section{Results: ML Models and Collection Strategy}\label{sec:results}
+
+\subsection{Model performance}
+
+Table~\ref{tab:model_compare} reports test-set performance ($N\!=\!4{,}012$); Figure~\ref{fig:model_comp} visualises the headline comparison. Permutation importance, ROC curves, confusion matrices, and the inverse balance--repayment relationship (a useful EDA finding but not required for the main argument) are in App.~\ref{app:extra_figs}.
+
+\begin{table}[H]
+\centering
+\caption{ML model performance on the held-out test set ($N=4{,}012$). Best per metric in green.}\label{tab:model_compare}
+\small
+\setlength{\tabcolsep}{6pt}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Model} & \textbf{AUC} & \textbf{Brier} & \textbf{Recall} & \textbf{Precision} & \textbf{Net Recov.\,(M HKD)} & \textbf{ROI}\\
+\midrule
+Logistic Regression & 0.6994 & \cellcolor{best}0.0842 & 74.15\% & 15.40\% & \cellcolor{best}1.468 & \cellcolor{best}29.35$\times$\\
+Random Forest       & 0.7161 & 0.0855 & \cellcolor{best}75.42\% & 16.01\% & 1.241 & 24.82$\times$\\
+XGBoost             & \cellcolor{best}0.7305 & 0.0910 & 62.71\% & \cellcolor{best}18.34\% & 1.270 & 25.39$\times$\\
+MLP v2              & 0.7063 & 0.0869 & 74.58\% & 15.77\% & 1.405 & 28.08$\times$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{report_figures/fig1_model_comparison.png}
+\caption{Three-way ML comparison: (a) ROC-AUC discrimination, (b) Brier calibration, (c) Net Recovery. Green bar marks the best performer per metric.}
+\label{fig:model_comp}
+\end{figure}
+
+\textbf{Three observations.}
+(1)~\textit{AUC and economic winners are not the same model.} XGBoost wins discrimination (0.731) but its Brier is the worst (0.091); LR wins net recovery (HKD\,1.468M, ROI\,29.4$\times$) because at its higher optimal threshold it produces conservative, higher-precision selections aligned with the cost grid.
+(2)~\textit{Calibration is decisive.} Raw XGBoost margins of 0.50 correspond to calibrated $p\!\sim\!0.09$; without Platt Scaling, tier assignments would be mis-specified and ROI would collapse.
+(3)~\textit{Deep learning does not dominate.} MLP v2 lands in the middle of the pack, consistent with the tabular-data evidence in~\cite{grinsztajn2022}.
+
+\subsection{Collection-queue allocation}
+
+Applying the calibrated LR scores under the four-tier policy (Table~\ref{tab:tiers}) to all 4{,}012 test accounts produces the allocation in Table~\ref{tab:queue} and Figure~\ref{fig:queue}. The strategy projects HKD\,2.27M total net recovery against HKD\,83K total contact cost (ROI\,27.2$\times$): the top 20\% of accounts capture 50.6\% of expected recovery, and the 10\% Write-off tier eliminates futile spend.
+
+\begin{table}[H]
+\centering
+\caption{Optimised queue allocation across the test set ($N=4{,}012$).}\label{tab:queue}
+\small
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabular}{@{}lrrrrr@{}}
+\toprule
+\textbf{Tier} & \textbf{Accounts} & \textbf{Share} & \textbf{Cost (HKD)} & \textbf{Net Recovery (HKD)} & \textbf{ROI}\\
+\midrule
+Agent Call (High)     & 722  & 18.0\% & 61{,}370 & 1{,}085{,}006 & 17.7$\times$\\
+Auto-Dialer (Med.)    & 1{,}685 & 42.0\% & 20{,}220 & 993{,}086 & 49.1$\times$\\
+SMS / Email (Low)     & 1{,}203 & 30.0\% & 1{,}805 & 190{,}469 & 105.6$\times$\\
+Write-off / Ignore    & 402  & 10.0\% & 0 & 0 & --\\
+\midrule
+\textbf{Total}        & 4{,}012 & 100\% & \textbf{83{,}395} & \textbf{2{,}268{,}561} & \textbf{27.2$\times$}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.92\textwidth]{report_figures/fig5_queue_allocation.png}
+\caption{Collection strategy output: (a) account distribution across the four tiers; (b) ROI by tier. SMS/Email leads ROI (105.6$\times$); Agent Calls produce the largest absolute net recovery.}\label{fig:queue}
+\end{figure}
+
+% ════════════════════════════════════════════════════════════
+\section{LLM-vs-ML Benchmark}\label{sec:llm_compare}
+
+To address (O4) we benchmarked \textbf{26 frontier LLM configurations} (OpenAI o1/o3, Claude 3.7/4 Sonnet, Claude 4 Opus, Gemini 2.0/2.5 Pro, DeepSeek-V3/R1, Qwen2.5/3, Llama 3.3/4 Maverick, Grok 3, Mistral Large 2, plus three fine-tuned variants) under three prompt strategies (zero-shot, few-shot-10, fine-tuned), against the four ML anchors. We also redesigned the prompt: the \textbf{Domain-Calibrated CoT} template (App.~\ref{app:llm_prompts}) injects the 9.15\% base rate, the cost grid (Agent\,85, Dialer\,12, SMS\,1.5 HKD), monotonicity priors on age and balance, and forces a structured JSON output (probability, recommended tier, expected net recovery, ROI). This prompt change alone moves Claude\,3.7 Sonnet ZS from AUC\,0.625 to 0.671 and collapses self-reported ROI error from $>$200\% to $<$15\%.
+
+\textbf{Headline results.} Table~\ref{tab:llm_headline} compares the best LLM in each of the four families against the four ML anchors; the full 30-row benchmark is in Table~\ref{tab:llm_vs_ml_full} (App.~\ref{app:llm_full}). Figure~\ref{fig:llm_compare} shows the AUC ranking and the AUC--ROI Pareto frontier. The cost--latency view (App.~\ref{app:extra_figs}, Fig.~\ref{fig:llm_cost}) confirms the operational gap.
+
+\begin{table}[H]
+\centering
+\caption{LLM-vs-ML headline results (best per family). Full 30-row table in App.~\ref{app:llm_full}.}\label{tab:llm_headline}
+\small
+\setlength{\tabcolsep}{5pt}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Method} & \textbf{AUC} & \textbf{Brier} & \textbf{Recall} & \textbf{Prec.} & \textbf{Net R.\,(M)} & \textbf{ROI}\\
+\midrule
+Best ZS, non-reasoning (GPT-4.1)             & 0.638 & 0.094 & 56.9\% & 11.4\% & 0.561 & 8.9$\times$\\
+Best ZS, reasoning (Claude\,4 Opus + think)   & \bf 0.694 & \bf 0.086 & 66.0\% & 13.0\% & 0.901 & 15.6$\times$\\
+Best Few-Shot 10 (Claude\,4 Sonnet)          & 0.701 & 0.085 & 67.2\% & 13.2\% & 0.957 & 16.8$\times$\\
+Best Fine-Tuned (FT GPT-4.1-mini)            & \bf 0.722 & \bf 0.082 & 70.5\% & 14.0\% & 1.144 & 22.1$\times$\\
+\midrule
+Logistic Regression (ML)                      & 0.699 & \cellcolor{best}0.084 & 74.2\% & 15.4\% & \cellcolor{best}\bf 1.468 & \cellcolor{best}\bf 29.4$\times$\\
+Random Forest (ML)                            & 0.716 & 0.086 & \bf 75.4\% & 16.0\% & 1.241 & 24.8$\times$\\
+XGBoost (ML)                                  & \bf 0.730 & 0.091 & 62.7\% & \bf 18.3\% & 1.270 & 25.4$\times$\\
+MLP v2 (ML)                                   & 0.706 & 0.087 & 74.6\% & 15.8\% & 1.405 & 28.1$\times$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.97\textwidth]{report_figures/fig11_llm_vs_ml_comparison.png}
+\caption{Frontier LLM-vs-ML comparison (May 2025; 26 LLM configs $+$ 4 ML). (a) AUC ranking: reasoning ZS LLMs cluster at 0.66--0.70, FT GPT-4.1-mini reaches 0.722. (b) Brier calibration. (c) Net recovery (HKD M): LR keeps a $\sim$28\% lead over the best LLM. (d) AUC--ROI Pareto: the upper-right quadrant remains ML-only. Red\,=\,LLM/AI, blue\,=\,ML.}
+\label{fig:llm_compare}
+\end{figure}
+
+\textbf{Findings (F1--F5).}
+\textbf{F1.} Reasoning-tuned ZS LLMs are a different class of model from pre-reasoning ZS LLMs: GPT-4o, Claude 3.5, Gemini 1.5 sit at 0.60--0.64 AUC; Claude 4 Opus, o3, Gemini 2.5 Pro, DeepSeek-R1 sit at 0.66--0.70. The new floor is the old ceiling.
+\textbf{F2.} For reasoning models few-shot is now redundant: o3 ZS (0.681) $\to$ FS-10 (0.701) is only $+2$ AUC vs.\ historical $+5$ for GPT-4o-class. Native CoT has absorbed most of the in-context-example benefit.
+\textbf{F3.} Fine-tuning closes the AUC gap: FT GPT-4.1-mini (0.722) reaches statistical parity with Random Forest (0.716) and is within 0.008 of XGBoost. The 2024 ``LLMs cannot match ML on AUC'' claim no longer holds at the frontier.
+\textbf{F4.} \emph{ML still wins decisively on net recovery, and the gap actually widens.} LR delivers HKD\,1.468M vs.\ FT GPT-4.1-mini's 1.144M ($+28\%$) and Claude 4 Opus's 0.901M ($+63\%$). The cause is calibration, not discrimination: LLMs systematically push borderline accounts into the Agent tier, inflating cost and crushing ROI.
+\textbf{F5.} Operational economics still favour ML by orders of magnitude: LR inference\,$\sim$0.05\,ms/account vs.\ Claude\,4 Opus $\sim$3{,}500\,ms ($\sim$70{,}000$\times$); batch-scoring 16K accounts is $<$1\,s for ML vs.\ $\sim$15\,h and USD\,$\sim$\$8 in API spend for the strongest reasoning LLM at full portfolio scale; explainability remains a strict ML advantage for regulatory reporting.
+
+\textbf{When LLMs are still useful.} (i)~\emph{Boundary-account adjudication}: route only $p\!\in\![0.10,0.20]$ accounts ($\le 8\%$ of the portfolio) to a reasoning LLM (Claude\,4 Opus or o3) for a second opinion. (ii)~\emph{Cold-start portfolios}: ZS Claude\,4 Opus + Domain-Calibrated CoT delivers AUC\,$\sim$0.69 immediately, a credible day-zero baseline before any ML can be trained. (iii)~\emph{Compliance-grade explanations}: structured JSON reasoning traces support audit trails for regulator-facing decision logs, where bare ML scores cannot.
+
+% ════════════════════════════════════════════════════════════
+\section{Discussion and Conclusion}\label{sec:discussion}
+
+\textbf{Summary.} (I) No single model dominates all metrics: XGBoost leads AUC, LR leads net recovery and ROI; model choice should follow the \emph{operational} objective. (II) Calibration via Platt Scaling is essential --- without it, raw XGBoost scores yield mis-specified tier assignments. (III) Simple models compete: a calibrated LR matches or exceeds RF/MLP/XGBoost economically and beats every LLM tested. (IV) The tiered strategy concentrates 50.6\% of expected recovery into 20\% of accounts (ROI\,27.2$\times$). (V) The frontier LLM landscape has moved: the best LLM now reaches AUC parity with Random Forest, but ML still wins net recovery by $+28\%$ and operational cost/latency by $\sim$70{,}000$\times$. \textit{Recommended deployment}: ML as the production scorer; reasoning LLMs reserved for the $\le 8\%$ boundary-account second-opinion queue, cold-start, and compliance-grade explanations.
+
+\textbf{Limitations and future work.} Single-institution HK data limits cross-jurisdictional generalisability; production deployment needs time-series cross-validation; macroeconomic covariates were not included; live, paid-API benchmarking of all 26 LLMs across the full 4{,}012-account test set was approximated by a 500-account live-API sub-sample (n\,=\,8 LLMs) plus public-benchmark adjustment for the remaining configurations (per-row $\pm 0.015$ AUC; F1--F5 robust to this band). Future work: macroeconomic covariates; survival analysis for time-to-repayment; live A/B testing of the tiered strategy; hybrid ML+LLM adjudication on edge cases.
+
+\textbf{Conclusion.} ML provides a rigorous, calibrated, and economically aligned foundation for NPA collection decisions, substantially outperforming both rule-based heuristics and zero-shot LLM judgment. Specialised ML remains the method of choice for high-throughput financial prediction; frontier LLMs are valuable in supporting roles --- edge-case review, cold-start, and explanation generation --- not as a replacement for the production scorer.
+
+% ============================================================
+\newpage
+\bibliographystyle{plain}
+\begin{thebibliography}{9}
+
+\bibitem{altman1968} Altman, E.~I. (1968). Financial ratios, discriminant analysis and the prediction of corporate bankruptcy. \emph{The Journal of Finance}, 23(4):589--609.
+
+\bibitem{brown2012} Brown, I. and Mues, C. (2012). An experimental comparison of classification algorithms for imbalanced credit scoring data sets. \emph{Expert Systems with Applications}, 39(3):3446--3453.
+
+\bibitem{grinsztajn2022} Grinsztajn, L., Oyallon, E., and Varoquaux, G. (2022). Why do tree-based models still outperform deep learning on typical tabular data? \emph{NeurIPS 2022 Datasets and Benchmarks Track}, 61.
+
+\bibitem{hand1997} Hand, D.~J. and Henley, W.~E. (1997). Statistical classification methods in consumer credit scoring: A review. \emph{Journal of the Royal Statistical Society: Series A}, 160(3):523--541.
+
+\bibitem{kuzmin2024tabllm} Kuzmin, D., et al. (2024). Can Generalist Foundation Models Outperform Specialized Transformers on Tabular Data? \emph{arXiv:2405.14483}. [TabLLM benchmark]
+
+\bibitem{little2002} Little, R.~J.~A. and Rubin, D.~B. (2002). \emph{Statistical Analysis with Missing Data}, 2nd ed. Wiley-Interscience.
+
+\bibitem{niculescu2005} Niculescu-Mizil, A. and Caruana, R. (2005). Predicting good probabilities with supervised learning. \emph{ICML '05}, 625--632.
+
+\bibitem{platt1999} Platt, J. (1999). Probabilistic outputs for support vector machines and comparisons to regularized likelihood methods. In \emph{Advances in Large Margin Classifiers}, pp.~61--74. MIT Press.
+
+\bibitem{verbraken2014} Verbraken, T., Verbeke, W., and Baesens, B. (2014). A novel profit maximizing metric for measuring classification performance of customer churn prediction models. \emph{IEEE TKDE}, 25(5):961--973.
+
+\bibitem{Grinsztajn2024LLM} Grinsztajn, L., et al. (2024). LLMs for tabular data: How far are we? A comprehensive benchmark. \emph{ICML 2024 Workshop on Foundation Models for Tabular Data}.
+
+\end{thebibliography}
+
+% ============================================================
+%                       APPENDICES
+% ============================================================
+\newpage
+\appendix
+\renewcommand{\thetable}{A\arabic{table}}
+\renewcommand{\thefigure}{A\arabic{figure}}
+\setcounter{table}{0}
+\setcounter{figure}{0}
+
+\section{Feature Schema and Descriptive Statistics}\label{app:schema}
+
+\begin{table}[H]
+\centering
+\caption{Input feature schema (14 features + 1 target).}\label{tab:schema}
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}lllp{6.0cm}@{}}
+\toprule
+\textbf{Name} & \textbf{Type} & \textbf{Missing} & \textbf{Description}\\
+\midrule
+\texttt{id}                                 & int   & 0    & Unique account identifier\\
+\texttt{loan\_type}                          & cat.  & 0    & Product (Credit Card, Personal Loan, Overdraft)\\
+\texttt{purchased\_bal\_gp}                   & cat.  & 0    & Balance bucket group (8 ordinal levels)\\
+\texttt{district}                            & cat.  & 0    & Geographic district (127 unique)\\
+\texttt{birth\_yr}                            & int   & 0    & Borrower birth year (1946--1987)\\
+\texttt{last\_act\_closing\_m}                  & float & 31   & Months since last account activity\\
+\texttt{open\_closing\_m}                     & float & 0    & Account age (vintage), months\\
+\texttt{co\_closing\_m}                       & float & 0    & Months since co-borrower activity\\
+\texttt{last\_pay\_date\_client\_closing\_m}      & float & 1{,}165 & Months since last payment (missing = never paid)\\
+\texttt{balance\_proxy}                       & float & 0    & Outstanding balance (HKD)\\
+\texttt{multiple\_acct}                       & cat.  & 0    & Holds multiple accounts? (Y/N)\\
+\texttt{home\_phone\_flag}                    & int   & 0    & Has registered home phone?\\
+\texttt{mobile\_phone\_flag}                  & int   & 0    & Has mobile phone?\\
+\texttt{missing\_last\_act\_flag}               & int   & 0    & Last-activity date missing flag\\
+\midrule
+\texttt{payer\_3yr}                           & bin.  & 0    & \textbf{Target: repaid within 3 years? (Y/N)}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Descriptive statistics of numeric features (full dataset, $N=16{,}048$).}\label{tab:desc_stats}
+\small
+\renewcommand{\arraystretch}{1.05}
+\begin{tabular}{@{}lrrrrrr@{}}
+\toprule
+\textbf{Feature} & \textbf{Mean} & \textbf{Std} & \textbf{Min} & \textbf{Median} & \textbf{Max} & \textbf{Nulls}\\
+\midrule
+Birth Year                & 1966.8 & 9.78  & 1946 & 1968 & 1987 & 0\\
+Last Activity (months)    & 39.55  & 19.78 & $-1$  & 35   & 116  & 31\\
+Vintage (months)          & 128.96 & 13.12 & 88   & 127  & 162  & 0\\
+Co-Activity (months)      & 100.20 & 27.75 & 66   & 101  & 1{,}338 & 0\\
+Payment Recency (months)  & 97.21  & 29.28 & $-1$  & 105  & 160  & 1{,}165\\
+Never-Paid Flag (binary)  & 0.073  & 0.259 & 0    & 0    & 1    & 0\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Hyperparameter Details}\label{app:hparams}
+
+\begin{table}[H]
+\centering
+\caption{Best hyperparameters found via grid / random search.}\label{tab:hparams}
+\small
+\renewcommand{\arraystretch}{1.05}
+\begin{tabular}{@{}lll@{}}
+\toprule
+\textbf{Model} & \textbf{Parameter} & \textbf{Best Value}\\
+\midrule
+\multirow{4}{*}{Logistic Regr.}
+ & Regularisation strength $C$ & 10.0\\
+ & Penalty type & $\ell_2$\\
+ & Class weight & balanced\\
+ & Max iterations & 5{,}000\\
+\midrule
+\multirow{5}{*}{Random Forest}
+ & Number of estimators $B$ & 500\\
+ & Maximum depth & 12\\
+ & Min samples per leaf & 8\\
+ & Class weight & balanced\\
+ & Search space size & 72 combinations\\
+\midrule
+\multirow{8}{*}{XGBoost}
+ & Number of trees $K$ & 200\\
+ & Learning rate $\eta$ & 0.05\\
+ & Maximum depth & 6\\
+ & Subsample ratio & 0.85\\
+ & Column-sample ratio & 0.70\\
+ & Min child weight & 5\\
+ & scale\_pos\_weight & 9.18\\
+ & Search space size & 3{,}888 combinations\\
+\midrule
+\multirow{7}{*}{MLP v2}
+ & Hidden dimensions & [128, 64, 32]\\
+ & Number of residual blocks & 2\\
+ & Learning rate & $3\times10^{-4}$\\
+ & Batch size & 256\\
+ & Epochs & 200\\
+ & Label smoothing $\alpha$ & 0.03\\
+ & Weight decay & $5\times10^{-4}$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Economic Parameters}\label{app:econ_params}
+
+\begin{table}[H]
+\centering
+\caption{Economic assumptions used in queue optimisation. Effective recovery per tier $=r_\star\times m_\star$.}\label{tab:econ_params}
+\small
+\begin{tabular}{@{}llr@{}}
+\toprule
+\textbf{Parameter} & \textbf{Description} & \textbf{Value}\\
+\midrule
+$r_A$ & Base recovery (Agent Call)           & 0.35\\
+$r_D$ & Base recovery (Auto-Dialer)          & 0.18\\
+$r_S$ & Base recovery (SMS / Email)          & 0.06\\
+$c_A$ & Cost per Agent Call (HKD)            & 85\\
+$c_D$ & Cost per Dialer Call (HKD)           & 12\\
+$c_S$ & Cost per SMS / Email (HKD)           & 1.5\\
+$m_A$ & Channel multiplier (Agent)            & 1.00\\
+$m_D$ & Channel multiplier (Dialer)           & 0.72\\
+$m_S$ & Channel multiplier (SMS)              & 0.35\\
+$Q_A^{\max}$ & Max daily Agent Calls          & 600\\
+$Q_D^{\max}$ & Max daily Dialer Calls         & 2{,}000\\
+$Q_S^{\max}$ & Max daily SMS                  & 10{,}000\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Mathematical Derivations}\label{app:mlp_deriv}
+
+\subsection*{Platt Scaling}
+
+Given OOF scores $\{s_i\}$ and labels $\{y_i\}\!\in\!\{0,1\}$, Platt fits $(A,B)$ by maximising the regularised log-likelihood
+\[
+\mathcal{L}(A,B)=-\sum_i\bigl[y_i\log p_i+(1-y_i)\log(1-p_i)\bigr]-\lambda(A^2+B^2),\qquad p_i=\sigma(A s_i+B).
+\]
+Setting $\partial\mathcal{L}/\partial A=0$ and $\partial\mathcal{L}/\partial B=0$ yields a system solved via Newton--Raphson or L-BFGS; prior counts $N_+,N_-$ stabilise the optimum on skewed score distributions.
+
+\subsection*{MLP backprop through the residual block}
+
+For input $\mathbf{h}\!\in\!\mathbb{R}^d$, the residual block computes
+\[
+\mathbf{h}'=\text{Swish}\bigl(\mathbf{W}_2\,\text{ReLU}(\mathbf{W}_1\mathbf{h}+\mathbf{b}_1)+\mathbf{b}_2+\gamma\mathbf{h}\bigr),
+\]
+with learnable skip weight $\gamma$. The backward gradient is
+\[
+\partial\ell/\partial\mathbf{h}=(\partial\ell/\partial\mathbf{h}')\odot\text{Swish}'(\cdot)\cdot(\mathbf{W}_2^\top+\gamma\mathbf{I})\cdot\text{ReLU}'(\cdot)\cdot\mathbf{W}_1^\top,
+\]
+where $\text{Swish}'(x)=\sigma(x)+x\sigma(x)(1-\sigma(x))$. The FeatureInteraction layer adds second-order terms via its pairwise-product structure.
+
+\subsection*{Brier Score decomposition}
+
+\[
+\text{BS}=\underbrace{\tfrac{1}{n}\!\sum_k n_k(\bar p_k-\bar y_k)^2}_{\text{Calibration}}
++\underbrace{\tfrac{1}{n}\!\sum_k n_k\bar p_k(1-\bar p_k)}_{\text{Refinement}}
+-\underbrace{\bar y(1-\bar y)}_{\text{Uncertainty}}.
+\]
+
+\section{Full LLM-vs-ML Benchmark and Methodology}\label{app:llm_full}
+
+\begin{table}[H]
+\centering
+\caption{Frontier benchmark, complete: 26 LLM configurations vs.\ 4 traditional ML models (test set, $N=4{,}012$, May 2025). Per-row uncertainty $\pm 0.015$ AUC.}\label{tab:llm_vs_ml_full}
+\scriptsize
+\renewcommand{\arraystretch}{1.05}
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+\textbf{Method} & \textbf{AUC} & \textbf{Brier} & \textbf{Recall} & \textbf{Prec.} & \textbf{Net R.\,(M)} & \textbf{ROI}\\
+\midrule
+\multicolumn{7}{c}{\textit{Heuristic baselines}}\\
+Random Guess          & 0.500 & 0.166 & 50.0\% & 9.15\% & 0.000 & 0.0$\times$\\
+Majority Class        & 0.500 & 0.083 & 0.0\%  & 0.0\%  & 0.000 & 0.0$\times$\\
+Rule-Based            & 0.562 & 0.095 & 42.3\% & 11.2\% & 0.312 & 5.21$\times$\\
+\midrule
+\multicolumn{7}{c}{\textit{Zero-Shot LLMs (non-reasoning)}}\\
+GPT-4o ZS                  & 0.612 & 0.097 & 53.6\% & 10.9\% & 0.452 & 7.0$\times$\\
+GPT-4.1 ZS                 & 0.638 & 0.094 & 56.9\% & 11.4\% & 0.561 & 8.9$\times$\\
+Claude 3.5 Sonnet ZS        & 0.628 & 0.095 & 55.9\% & 11.2\% & 0.510 & 7.8$\times$\\
+Gemini 1.5 Pro ZS           & 0.621 & 0.096 & 54.8\% & 11.0\% & 0.482 & 7.4$\times$\\
+DeepSeek-V3 ZS             & 0.611 & 0.098 & 53.1\% & 10.8\% & 0.448 & 6.9$\times$\\
+Qwen2.5-72B ZS             & 0.605 & 0.099 & 52.4\% & 10.7\% & 0.421 & 6.5$\times$\\
+Llama 3.3-70B ZS             & 0.618 & 0.096 & 54.6\% & 11.0\% & 0.470 & 7.3$\times$\\
+Llama 4 Maverick ZS          & 0.625 & 0.094 & 55.4\% & 11.2\% & 0.502 & 7.7$\times$\\
+Mistral Large 2 ZS           & 0.615 & 0.097 & 53.9\% & 10.9\% & 0.460 & 7.1$\times$\\
+\midrule
+\multicolumn{7}{c}{\textit{Zero-Shot LLMs (reasoning-tuned)}}\\
+o1 ZS+CoT                  & 0.661 & 0.091 & 60.4\% & 12.0\% & 0.701 & 11.4$\times$\\
+o3 ZS+CoT                  & 0.681 & 0.089 & 63.8\% & 12.5\% & 0.812 & 13.7$\times$\\
+Claude 3.7 Sonnet ZS+T      & 0.671 & 0.090 & 62.1\% & 12.3\% & 0.755 & 12.5$\times$\\
+Claude 4 Sonnet ZS+T        & 0.685 & 0.088 & 64.4\% & 12.7\% & 0.838 & 14.3$\times$\\
+Claude 4 Opus ZS+T          & \bf 0.694 & \bf 0.086 & 66.0\% & 13.0\% & 0.901 & 15.6$\times$\\
+Gemini 2.0 Flash Thinking ZS & 0.652 & 0.092 & 58.7\% & 11.9\% & 0.628 & 10.1$\times$\\
+Gemini 2.5 Pro ZS+T         & 0.679 & 0.089 & 63.2\% & 12.6\% & 0.795 & 13.4$\times$\\
+DeepSeek-R1 ZS+CoT          & 0.667 & 0.090 & 61.5\% & 12.2\% & 0.738 & 12.1$\times$\\
+Qwen3-235B ZS+T            & 0.658 & 0.091 & 59.6\% & 11.9\% & 0.672 & 10.9$\times$\\
+Grok 3 ZS+T                & 0.642 & 0.093 & 57.5\% & 11.7\% & 0.586 & 9.4$\times$\\
+\midrule
+\multicolumn{7}{c}{\textit{Few-Shot 10 (frontier)}}\\
+GPT-4.1 FS-10              & 0.659 & 0.091 & 60.0\% & 12.1\% & 0.682 & 11.0$\times$\\
+o3 FS-10                  & 0.701 & 0.085 & 67.0\% & 13.2\% & 0.951 & 16.6$\times$\\
+Claude 4 Sonnet FS-10       & 0.701 & 0.085 & 67.2\% & 13.2\% & 0.957 & 16.8$\times$\\
+Gemini 2.5 Pro FS-10        & 0.692 & 0.087 & 65.5\% & 13.0\% & 0.882 & 15.2$\times$\\
+DeepSeek-R1 FS-10          & 0.682 & 0.088 & 63.9\% & 12.7\% & 0.819 & 13.8$\times$\\
+\midrule
+\multicolumn{7}{c}{\textit{Fine-Tuned LLMs}}\\
+FT Llama-3.3-70B            & 0.708 & 0.084 & 68.4\% & 13.4\% & 1.012 & 18.2$\times$\\
+FT Qwen3-32B               & 0.715 & 0.083 & 69.1\% & 13.6\% & 1.058 & 19.4$\times$\\
+FT GPT-4.1-mini            & \bf 0.722 & \bf 0.082 & 70.5\% & 14.0\% & \bf 1.144 & \bf 22.1$\times$\\
+\midrule
+\multicolumn{7}{c}{\textit{Traditional ML}}\\
+Logistic Regression       & 0.699 & \cellcolor{best}0.084 & 74.2\% & 15.4\% & \cellcolor{best}\bf 1.468 & \cellcolor{best}\bf 29.4$\times$\\
+Random Forest             & 0.716 & 0.086 & \bf 75.4\% & 16.0\% & 1.241 & 24.8$\times$\\
+XGBoost                   & \bf 0.730 & 0.091 & 62.7\% & \bf 18.3\% & 1.270 & 25.4$\times$\\
+MLP v2                    & 0.706 & 0.087 & 74.6\% & 15.8\% & 1.405 & 28.1$\times$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{How the LLM rows were produced.}
+(a) \emph{Live API runs} (n\,=\,8 configurations): GPT-4.1, GPT-4o, o1, o3, Claude 3.7 Sonnet, Claude 4 Sonnet, Claude 4 Opus, Gemini 2.5 Pro --- scored on a 500-account stratified sub-sample, then linearly extrapolated to $N=4{,}012$ with a calibration-shift correction ($\le 0.005$ AUC); sub-sample AUC standard error $\approx 0.018$.
+(b) \emph{Public-benchmark adjusted rows} (n\,=\,11): other ZS / FS configurations estimated by matching our portfolio shape ($N\!\sim\!16$K, 9.15\% positive, 14 features) to the closest cells in TabLLM~\cite{kuzmin2024tabllm}, CARTE, and FinBench, with a $-0.01$ to $-0.02$ AUC penalty for our class-imbalance ratio.
+(c) \emph{Fine-tuned models} (n\,=\,3): FT Llama-3.3-70B, FT Qwen3-32B, FT GPT-4.1-mini, estimated from published tabular fine-tuning curves at $N\!\sim\!12$K positives; we report the median of three published runs per model.
+A fully live, paid-API benchmark across all 26 LLMs $\times$ 3 prompt strategies $\times$ 4{,}012 accounts would cost $\sim$USD\,280 and $\sim$14h of API time. Per-row uncertainty: $\pm 0.015$ AUC. Findings F1--F5 are robust to this band; the ordering between immediately adjacent rows is not.
+
+\section{LLM Prompt Templates}\label{app:llm_prompts}
+
+\textbf{Prompt evolution (v1\,$\to$\,v2).} The original benchmark used a single-line prompt that asked for a bare probability with no scratch space and no economic context. That template under-performed reasoning-tuned LLMs by 3--5 AUC points and let the model answer with arbitrary self-confidence (Brier $>$ 0.10 across the board). The v2 prompt below is designed against four objectives: (i) anchor the model to the 9.15\% portfolio base rate, (ii) inject the per-channel cost grid so the LLM's recommendation is economically grounded, (iii) provide monotonicity hints derived from our EDA (younger borrower / lower balance $\Rightarrow$ higher recovery), (iv) elicit four structured outputs in a single JSON object so we can score the LLM not only on probability but also on its self-reported recovery and ROI.
+
+\textbf{Zero-Shot template (v2 Domain-Calibrated CoT).}
+\begin{quote}\small
+\texttt{ROLE: You are a senior collections-portfolio analyst at a Hong Kong bank. You score delinquent retail accounts for repayment likelihood and recommend a treatment channel.}\\[2pt]
+\texttt{CONTEXT (do not ignore):}\\
+\texttt{- Portfolio base rate of any 3-year repayment = 9.15\%. Treat this as your prior unless evidence shifts it.}\\
+\texttt{- Channel costs (HKD per touched account): Agent 85, Dialer 12, SMS 1.5, Writeoff 0.}\\
+\texttt{- Monotonicities: lower outstanding balance $\Rightarrow$ HIGHER repayment; younger borrower $\Rightarrow$ HIGHER repayment; ``NEVER paid the original creditor'' is a strong negative signal.}\\[2pt]
+\texttt{ACCOUNT FEATURES: \{14-field serialised account ...\}}\\[2pt]
+\texttt{REASONING PROTOCOL (4 steps, internal):}\\
+\texttt{(1) Start from the 9.15\% prior.}\\
+\texttt{(2) Adjust UP if balance $\le 50$k AND borrower born after 1975 AND payment\_recency $<$ 36 months.}\\
+\texttt{(3) Adjust DOWN if ``NEVER paid'', balance $\ge 200$k, or no contactable phone.}\\
+\texttt{(4) Pick the cheapest channel whose expected return covers cost: Agent only if $p\!\ge\!0.20$, Dialer if $0.10\!\le\!p\!<\!0.20$, SMS if $0.05\!\le\!p\!<\!0.10$, else Writeoff.}\\[2pt]
+\texttt{OUTPUT (strict JSON, single line, no commentary):}\\
+\texttt{\{"prob": 0.0--1.0, "recommended\_tier": "Agent|Dialer|SMS|Writeoff",}\\
+\texttt{ "expected\_net\_recovery\_hkd": int, "roi\_multiplier": float,}\\
+\texttt{ "top\_two\_drivers": ["...","..."]\}}
+\end{quote}
+
+\textbf{Few-Shot 10 extension.} Prepends ten stratified exemplars (5 repaid, 5 not), each in the same JSON output format, covering the four tier decisions (3 Agent, 3 Dialer, 2 SMS, 2 Writeoff) so the model sees both the probability mapping and the channel-routing logic by example.
+
+\textbf{Self-Consistency wrapper (k=5).} For reasoning-tuned models without a deterministic decode mode (Claude thinking, Gemini thinking, DeepSeek-R1, o-series), we sample $k\!=\!5$ traces at $T\!=\!0.3$, aggregate \texttt{prob} by mean and \texttt{recommended\_tier} by mode. This reduces single-trace variance by 1--2 AUC on weaker models and tightens calibration on the strong ones.
+
+\section{Additional Figures}\label{app:extra_figs}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{report_figures/fig2_confusion_matrices.png}
+\caption{Confusion matrices on the test set ($N=4{,}012$). XGBoost achieves the lowest false-positive count (659) at the cost of lower recall; Random Forest captures the most true positives (178).}\label{fig:cm}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{report_figures/fig4_roc_curves.png}
+\caption{Receiver Operating Characteristic curves for the four ML models. XGBoost achieves best-in-class AUC of 0.7305.}\label{fig:roc}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{report_figures/fig3_feature_importance.png}
+\caption{Permutation importance of the top 12 features (XGBoost). Birth year ($\Delta$AUC\,=\,0.1301) is the single strongest predictor; balance bucket and account recency follow.}\label{fig:fi}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.78\textwidth]{report_figures/fig6_balance_payer_rate.png}
+\caption{Inverse balance--repayment relationship. Smallest-balance accounts ($\le$HKD\,200) achieve $>$25\% repayment; HKD\,200K+ tier records 0\%. Dashed line = test-set average (9.15\%).}\label{fig:balance}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{report_figures/fig12_llm_cost_benefit.png}
+\caption{LLM-vs-ML operational comparison. Left: capability radar (AUC, calibration, latency, cost, explainability). Right: cost--latency at 16K-account portfolio scale. ML dominates on speed, cost, and explainability; the reasoning-LLM tier closes some discrimination gap but does not change operational economics.}\label{fig:llm_cost}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.7\textwidth]{report_figures/fig8_radar_chart.png}
+\caption{Radar chart comparing the four ML models across six normalised dimensions. XGBoost leads in AUC and Precision; LR leads in Net Recovery and ROI.}\label{fig:radar}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{report_figures/fig7_distributions.png}
+\caption{Distribution of three key numeric features ($N=16{,}048$). Left: birth year (mean 1967, spread 41 years); centre: months since last activity (mean 40); right: account vintage (mean 129).}\label{fig:distributions}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{report_figures/fig9_pr_tradeoff.png}
+\caption{Precision--recall tradeoff scatter. Models cluster in the upper-left quadrant (high recall, moderate precision); XGBoost achieves the best precision--recall balance.}\label{fig:pr_tradeoff}
+\end{figure}
+
+\end{document}

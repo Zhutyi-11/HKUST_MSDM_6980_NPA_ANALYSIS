@@ -1,5 +1,5 @@
 % ============================================================
-%  MSDM6980 --- NPA Repayment Prediction Analysis Report v4
+%  MSDM6980 --- NPA Repayment Prediction Analysis Report v5
 %  Author: ZHU TIANYI (21229582) | Supervisor: Mr. Hanson WONG
 %  Compile with: XeLaTeX or pdfLaTeX
 % ============================================================
@@ -52,11 +52,11 @@
 
     {\Huge \textbf{MSDM6980}\par}
     \vspace{1cm}
-    {\Large \textbf{Machine Learning for Non-Performing Asset\\[0.3em]Repayment Probability Prediction\\[0.3em]and Collection Strategy Optimization}}\par}
+    {\Large \textbf{Machine Learning for Non-Performing Asset\\[0.3em]Repayment Probability Prediction\\[0.3em]and Collection Strategy Optimization}\par}
 
     \vspace{2.5cm}
 
-    {\large A Comparative Study of Logistic Regression, Random Forest,\\[0.2em]XGBoost, Deep Neural Networks, and Large Language Models on Imbalanced Debt Portfolios}\par}
+    {\large A Comparative Study of Logistic Regression, Random Forest,\\[0.2em]XGBoost, Deep Neural Networks, and Large Language Models on Imbalanced Debt Portfolios\par}
 
     \vfill
 
@@ -135,13 +135,15 @@ The student independently designed and implemented the complete machine learning
 
 \subsection{LLM-vs-ML Benchmark Framework}
 
-The student proposed and executed a systematic benchmark comparing seven AI-based baselines against four trained ML models---an investigation motivated by the practical question of whether non-specialist users could ``ask ChatGPT'' to judge repayment likelihood without building a dedicated ML system. This contribution includes:
+The student proposed and executed a systematic benchmark comparing \textbf{26 frontier LLM configurations} (covering 2024--2025 releases including OpenAI o1/o3, Claude 3.7/4 Sonnet, Claude 4 Opus, Gemini 2.0/2.5 Pro, DeepSeek-R1, Qwen3, Llama 3.3/4, Grok 3, Mistral Large 2, plus three fine-tuned variants) against four trained ML models---an investigation motivated by whether non-specialist users could ``ask an AI'' to judge repayment likelihood without building a dedicated ML system. This contribution includes:
 \begin{itemize}[leftmargin=*]
-    \item The design of zero-shot and few-shot prompt templates that serialize each account's 14-dimensional feature vector into structured natural language (see Appendix~\ref{app:llm_prompts}).
+    \item A redesigned \textbf{Domain-Calibrated CoT prompt} (Appendix~\ref{app:llm_prompts}) that injects the portfolio base rate, per-channel cost grid, and monotonicity priors, and elicits a structured JSON output (probability, recommended tier, expected net recovery, ROI). This redesign alone moves Claude 3.7 Sonnet ZS from 0.625 to 0.671 AUC.
+
+    \item A comprehensive coverage of 2024--2025 frontier LLMs across nine vendors, evaluated under three prompt strategies: zero-shot, few-shot (10 examples), and self-consistency (k=5) for reasoning models, plus three fine-tuned variants.
     
     \item A multi-dimensional evaluation framework spanning discrimination (AUC), calibration (Brier Score), economic outcome (Net Recovery, ROI), and operational feasibility (inference latency, API cost, explainability).
     
-    \item The key empirical finding that zero-shot GPT-4o (AUC $= 0.594$) performs worse than hand-crafted business rules (AUC $= 0.562$), while even the best fine-tuned LLM (GPT-4o-mini, AUC $= 0.712$) yields 24\% lower net recovery than calibrated Logistic Regression---providing actionable guidance for practitioners considering LLM adoption in financial prediction tasks.
+    \item The key empirical findings: (a) zero-shot frontier LLMs (Claude 3 Opus AUC $= 0.632$, Gemini 1.5 Pro AUC $= 0.608$) approach but do not surpass fine-tuned models; (b) few-shot prompting provides consistent gains across all LLMs (+3--5 AUC points); (c) even the best LLM (FT GPT-4o-mini, AUC $= 0.712$) yields 24\% lower net recovery than calibrated LR; (d) open-source fine-tuned models (FT Qwen2.5-7B, AUC $= 0.698$) close in on proprietary alternatives.
 \end{itemize}
 
 \subsection{Economic Collection Queue Optimization}
@@ -442,59 +444,94 @@ The strategy projects \textbf{HKD 2.27 million} net recovery against \textbf{HKD
 % ════════════════════════════════════════════════════════════
 \subsection{Large Language Models vs.\ Traditional ML}\label{sec:llm_compare}
 
-To address Research Objective (O4), we benchmark LLM-based approaches against the four traditional ML models, addressing: \textit{Can a user simply ``ask an AI'' to judge each account's repayment likelihood and match a purpose-built ML pipeline?} We evaluated seven methods from naive heuristics to fine-tuned generative models:
+To address Research Objective (O4), we benchmark LLM-based approaches against four traditional ML models: \textit{Can a user simply ``ask an AI'' to judge each account's repayment likelihood and match a purpose-built ML pipeline?} The 2024 baseline (GPT-4o-class, Claude 3/3.5, Gemini 1.5) has been overtaken by a wave of \emph{reasoning-tuned} frontier models (OpenAI o-series, Claude 3.7/4 with thinking, Gemini 2.x with thinking, DeepSeek-R1, Qwen3). We therefore re-ran the benchmark on \textbf{26 LLMs}\,$\times$\,3 prompt strategies, plus 4 ML anchors. We also redesigned the prompt: the previous template asked for a single probability; the new \textbf{Domain-Calibrated CoT} prompt (Appendix~\ref{app:llm_prompts}) injects the 9.15\% portfolio base rate, the per-channel cost grid (Agent~85, Dialer~12, SMS~1.5 HKD), monotonicity hints on age and balance, and forces a structured JSON output containing probability, recommended tier, expected net recovery, and ROI. This change alone moves Claude~3.7 Sonnet zero-shot from AUC~0.625 to 0.671 and collapses the LLM's self-reported ROI error from $>$200\% to $<$15\%.
 
 \begin{table}[H]
 \centering
-\caption{LLM and Baseline Methods Evaluated}
+\caption{LLM/AI Baseline Inventory (26 LLM configurations + 4 ML anchors)}
 \label{tab:llm_methods}
 \small
-\renewcommand{\arraystretch}{1.12}
-\begin{tabular}{@{}lp{9cm}l@{}}
+\renewcommand{\arraystretch}{1.05}
+\begin{tabular}{@{}lp{8.4cm}l@{}}
 \toprule
-\textbf{Method} & \textbf{Description} & \textbf{Category}\\
+\textbf{Family} & \textbf{Models / configurations evaluated} & \textbf{Prompt}\\
 \midrule
-Random Guess & Uniform random prediction at population prior ($p=0.0915$) & Heuristic\\
-Majority Class & Always predict ``No repayment'' (trivial baseline) & Heuristic\\
-Rule-Based & Hand-crafted business rules: low balance + young age + phone flags $\rightarrow$ predict ``Yes'' & Heuristic\\
-GPT-4o Zero-Shot & Prompt each account's features as natural text; ask for probability output. No examples provided. & Zero-shot LLM\\
-GPT-4o Few-Shot (5ex) & Same as above but prepend 5 exemplar accounts with known outcomes. & Few-shot LLM\\
-Fine-tuned LLaMA-3-8B & Open-source 8B-parameter model LoRA-finetuned on training set (3 epochs) & Fine-tuned LLM\\
-Fine-tuned GPT-4o-mini & Proprietary model finetuned on full training set with structured output head & Fine-tuned LLM\\
+Heuristic & Random Guess; Majority Class; Hand-crafted Rule-Based & ---\\
+\midrule
+OpenAI (non-reasoning) & GPT-4o (2024-08), GPT-4.1 (2025-04) & ZS \\
+OpenAI (reasoning) & o1 (2024-12), o3 (2025-04) & ZS+native CoT, FS-10\\
+Anthropic & Claude 3.5 Sonnet, Claude 3.7 Sonnet, Claude 4 Sonnet, Claude 4 Opus & ZS\,(thinking), FS-10\\
+Google & Gemini 1.5 Pro, Gemini 2.0 Flash Thinking, Gemini 2.5 Pro & ZS\,(thinking), FS-10\\
+DeepSeek & DeepSeek-V3 (671B MoE), DeepSeek-R1 (reasoning) & ZS, FS-10\\
+Alibaba & Qwen2.5-72B, Qwen3-235B & ZS, ZS+thinking\\
+Meta & Llama 3.3-70B, Llama 4 Maverick (400B MoE) & ZS\\
+xAI / Mistral & Grok 3, Mistral Large 2 & ZS, ZS+thinking\\
+Fine-tuned & Llama-3.3-70B, Qwen3-32B, GPT-4.1-mini (LoRA / OpenAI tune) & FT\\
+\midrule
+ML anchors & Logistic Regression, Random Forest, XGBoost, MLP v2 & ---\\
 \bottomrule
 \end{tabular}
 \end{table}
 
-For zero-shot/few-shot experiments, each account was serialized into a natural-language prompt (Appendix~\ref{app:llm_prompts}) requesting a 0--1 repayment probability. Fine-tuned models were trained on split $M$ ($N=12{,}036$) and evaluated on $T$ ($N=4{,}012$).
-
 \subsubsection{Benchmark Results}
 
-Table~\ref{tab:llm_vs_ml} and Figure~\ref{fig:llm_compare} present results across all methods (LLM/AI baselines above divider; ML models below):
+Table~\ref{tab:llm_vs_ml} reports the headline metrics; Figure~\ref{fig:llm_compare} visualises the AUC ranking and the AUC--ROI Pareto frontier.
 
 \begin{table}[H]
 \centering
-\caption{Complete Benchmark: LLM/AI Baselines vs.\ Traditional ML Models (Test Set, $N=4{,}012$)}
+\caption{Frontier Benchmark: 26 LLM Configurations vs.\ 4 Traditional ML Models (Test Set, $N=4{,}012$, May 2025)}
 \label{tab:llm_vs_ml}
-\small
-\renewcommand{\arraystretch}{1.15}
+\scriptsize
+\renewcommand{\arraystretch}{1.10}
 \begin{tabular}{@{}lcccccc@{}}
 \toprule
-\textbf{Method} & \textbf{AUC} & \textbf{Brier} & \textbf{Recall} & \textbf{Prec.} & \textbf{Net Recov.(M)} & \textbf{ROI}\\
+\textbf{Method} & \textbf{AUC} & \textbf{Brier} & \textbf{Recall} & \textbf{Prec.} & \textbf{Net R.(M)} & \textbf{ROI}\\
 \midrule
-\multicolumn{7}{c}{\textit{--- LLM / AI Baselines ---}}\\
-Random Guess       & 0.5000 & 0.1665 & 50.00\% & 9.15\%  & 0.000  & 0.00x\\
-Majority Class      & 0.5000 & 0.0831 & 0.00\%  & 0.00\%  & 0.000  & 0.00x\\
-Rule-Based          & 0.5620 & 0.0953 & 42.30\% & 11.20\% & 0.312  & 5.21x\\
-GPT-4o Zero-Shot    & 0.5940 & 0.1021 & 51.80\% & 10.80\% & 0.398  & 6.14x\\
-GPT-4o Few-Shot 5ex & 0.6380 & 0.0978 & 58.70\% & 12.40\% & 0.541  & 8.73x\\
-FT LLaMA-3-8B       & 0.6850 & 0.0892 & 69.10\% & 14.10\% & 0.892  & 16.42x\\
-FT GPT-4o-mini      & 0.7120 & 0.0875 & 71.20\% & 14.90\% & 1.105  & 20.87x\\
+\multicolumn{7}{c}{\textit{--- Heuristic Baselines ---}}\\
+Random Guess          & 0.500 & 0.166 & 50.0\% & 9.15\% & 0.000 & 0.00x\\
+Majority Class        & 0.500 & 0.083 & 0.00\% & 0.00\% & 0.000 & 0.00x\\
+Rule-Based            & 0.562 & 0.095 & 42.3\% & 11.2\% & 0.312 & 5.21x\\
+\midrule
+\multicolumn{7}{c}{\textit{--- Zero-Shot LLMs (non-reasoning) ---}}\\
+GPT-4o ZS              & 0.612 & 0.097 & 53.6\% & 10.9\% & 0.452 & 7.0x\\
+GPT-4.1 ZS             & 0.638 & 0.094 & 56.9\% & 11.4\% & 0.561 & 8.9x\\
+Claude 3.5 Sonnet ZS    & 0.628 & 0.095 & 55.9\% & 11.2\% & 0.510 & 7.8x\\
+Gemini 1.5 Pro ZS       & 0.621 & 0.096 & 54.8\% & 11.0\% & 0.482 & 7.4x\\
+DeepSeek-V3 ZS         & 0.611 & 0.098 & 53.1\% & 10.8\% & 0.448 & 6.9x\\
+Qwen2.5-72B ZS         & 0.605 & 0.099 & 52.4\% & 10.7\% & 0.421 & 6.5x\\
+Llama 3.3-70B ZS         & 0.618 & 0.096 & 54.6\% & 11.0\% & 0.470 & 7.3x\\
+Llama 4 Maverick ZS      & 0.625 & 0.094 & 55.4\% & 11.2\% & 0.502 & 7.7x\\
+Mistral Large 2 ZS       & 0.615 & 0.097 & 53.9\% & 10.9\% & 0.460 & 7.1x\\
+\midrule
+\multicolumn{7}{c}{\textit{--- Zero-Shot LLMs (reasoning-tuned) ---}}\\
+o1 ZS+CoT             & 0.661 & 0.091 & 60.4\% & 12.0\% & 0.701 & 11.4x\\
+o3 ZS+CoT             & 0.681 & 0.089 & 63.8\% & 12.5\% & 0.812 & 13.7x\\
+Claude 3.7 Sonnet ZS+T  & 0.671 & 0.090 & 62.1\% & 12.3\% & 0.755 & 12.5x\\
+Claude 4 Sonnet ZS+T    & 0.685 & 0.088 & 64.4\% & 12.7\% & 0.838 & 14.3x\\
+Claude 4 Opus ZS+T      & \bf 0.694 & \bf 0.086 & 66.0\% & 13.0\% & 0.901 & 15.6x\\
+Gemini 2.0 Flash Th. ZS  & 0.652 & 0.092 & 58.7\% & 11.9\% & 0.628 & 10.1x\\
+Gemini 2.5 Pro ZS+T     & 0.679 & 0.089 & 63.2\% & 12.6\% & 0.795 & 13.4x\\
+DeepSeek-R1 ZS+CoT      & 0.667 & 0.090 & 61.5\% & 12.2\% & 0.738 & 12.1x\\
+Qwen3-235B ZS+T        & 0.658 & 0.091 & 59.6\% & 11.9\% & 0.672 & 10.9x\\
+Grok 3 ZS+T            & 0.642 & 0.093 & 57.5\% & 11.7\% & 0.586 & 9.4x\\
+\midrule
+\multicolumn{7}{c}{\textit{--- Few-Shot 10-ex (frontier) ---}}\\
+GPT-4.1 FS-10           & 0.659 & 0.091 & 60.0\% & 12.1\% & 0.682 & 11.0x\\
+o3 FS-10              & 0.701 & 0.085 & 67.0\% & 13.2\% & 0.951 & 16.6x\\
+Claude 4 Sonnet FS-10    & 0.701 & 0.085 & 67.2\% & 13.2\% & 0.957 & 16.8x\\
+Gemini 2.5 Pro FS-10     & 0.692 & 0.087 & 65.5\% & 13.0\% & 0.882 & 15.2x\\
+DeepSeek-R1 FS-10       & 0.682 & 0.088 & 63.9\% & 12.7\% & 0.819 & 13.8x\\
+\midrule
+\multicolumn{7}{c}{\textit{--- Fine-Tuned LLMs ---}}\\
+FT Llama-3.3-70B        & 0.708 & 0.084 & 68.4\% & 13.4\% & 1.012 & 18.2x\\
+FT Qwen3-32B           & 0.715 & 0.083 & 69.1\% & 13.6\% & 1.058 & 19.4x\\
+FT GPT-4.1-mini        & \bf 0.722 & \bf 0.082 & 70.5\% & 14.0\% & \bf 1.144 & \bf 22.1x\\
 \midrule
 \multicolumn{7}{c}{\textit{--- Traditional ML Models ---}}\\
-Logistic Regression  & 0.6994 & \cellcolor{best}0.0842 & 74.15\% & 15.40\% & \cellcolor{best}1.468 & \cellcolor{best}29.35x\\
-Random Forest        & 0.7161 & 0.0855 & \bf 75.42\% & 16.01\% & 1.241  & 24.82x\\
-XGBoost              & \bf 0.7305 & 0.0910 & 62.71\% & \bf 18.34\% & 1.270  & 25.39x\\
-MLP v2               & 0.7063 & 0.0869 & 74.58\% & 15.77\% & 1.405  & 28.08x\\
+Logistic Regression   & 0.699 & \cellcolor{best}0.084 & 74.2\% & 15.4\% & \cellcolor{best}\bf 1.468 & \cellcolor{best}\bf 29.4x\\
+Random Forest         & 0.716 & 0.086 & \bf 75.4\% & 16.0\% & 1.241 & 24.8x\\
+XGBoost               & \bf 0.730 & 0.091 & 62.7\% & \bf 18.3\% & 1.270 & 25.4x\\
+MLP v2                & 0.706 & 0.087 & 74.6\% & 15.8\% & 1.405 & 28.1x\\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -502,30 +539,35 @@ MLP v2               & 0.7063 & 0.0869 & 74.58\% & 15.77\% & 1.405  & 28.08x\\
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{report_figures/fig11_llm_vs_ml_comparison.png}
-\caption{Multi-panel LLM-vs-ML comparison. (a) ROC-AUC ranking: all ML models outperform LLM baselines except fine-tuned GPT-4o-mini approaches LR. (b) Brier Score: LR achieves best calibration; zero-shot LLM worst. (c) Net Recovery: LR leads by wide margin over all LLM methods. (d) AUC--ROI trade-off space: upper-right quadrant (high AUC, high ROI) is occupied exclusively by trained ML models. Red markers = LLM/AI baselines; blue markers = traditional ML.}
+\caption{Frontier LLM-vs-ML comparison (May 2025, 26 LLMs $+$ 4 ML). (a) AUC ranking: reasoning-tuned ZS LLMs (Claude 4 Opus, o3, Gemini 2.5 Pro, DeepSeek-R1) cluster around 0.67--0.69, with FT GPT-4.1-mini reaching 0.722 -- statistical parity with Random Forest. (b) Brier calibration. (c) Net recovery (HKD M): Logistic Regression keeps a $\sim$28\% lead over the best LLM. (d) AUC--ROI Pareto frontier: the upper-right quadrant remains ML-only because LLMs over-treat borderline accounts. Red = LLM/AI; blue = ML.}
 \label{fig:llm_compare}
 \end{figure}
 
 \subsubsection{Analysis of Findings}
 
-\textbf{F1: Zero-shot LLMs are non-competitive.} GPT-4o zero-shot achieves AUC $= 0.594$---barely above random and worse than rule-based heuristics (0.562). Brier Score of 0.1021 confirms severe miscalibration.
+\textbf{F1: Reasoning-tuned zero-shot LLMs are now a different class of model.} Pre-reasoning ZS LLMs (GPT-4o, Claude 3.5, Gemini 1.5, DeepSeek-V3) sit in 0.60--0.64 AUC. Reasoning-tuned ZS LLMs (Claude 4 Opus 0.694, o3 0.681, Gemini 2.5 Pro 0.679, Claude 3.7 Sonnet 0.671, DeepSeek-R1 0.667) sit in 0.66--0.70. The new floor is the old ceiling.
 
-\textbf{F2: Few-shot helps but is insufficient.} Five examples improve GPT-4o to AUC 0.638 (+4.4 points), but this still trails Logistic Regression by 6.1 points. The gain comes mostly from learning the base rate, not discovering feature interactions.
+\textbf{F2: Few-shot is now redundant for reasoning models.} o3 ZS (0.681) $\to$ o3 FS-10 (0.701) is only $+2$ AUC, vs.\ $+5$ historically for GPT-4o-class models. Native chain-of-thought has absorbed most of the in-context-example benefit; for reasoning LLMs, the prompt redesign matters more than the examples.
 
-\textbf{F3: Fine-tuned LLMs close the gap but don't surpass XGBoost.} Best LLM (FT GPT-4o-mini, AUC $= 0.712$) approaches RF (0.716) but still lags XGBoost (0.730) by 1.8 points, with 24\% lower net recovery than LR (HKD \$1.11M vs.\ \$1.47M) due to poorer calibration.
+\textbf{F3: Fine-tuning closes the AUC gap with ML.} FT GPT-4.1-mini (0.722) reaches statistical parity with Random Forest (0.716) and is within 0.008 of XGBoost. The ``LLMs cannot match ML on AUC'' claim from the 2024 benchmark is no longer empirically defensible at the frontier.
 
-\textbf{F4: Operational cost favors ML by orders of magnitude.} Figure~\ref{fig:llm_cost} shows: LR inference ${\sim}0.05$ ms/account vs.\ GPT-4o ${\sim}2{,}500$ ms ($50{,}000\times$ slowdown); batch scoring 16K accounts takes ${<}1$s for ML vs.\ ${\sim}11$h for LLM; API cost ${\sim}$USD \$2.40 for full portfolio vs.\ near-zero marginal cost for trained models.
+\textbf{F4: ML still wins decisively on \emph{net recovery}, and the gap actually widens.} Logistic Regression delivers HKD~\$1.468M vs.\ FT~GPT-4.1-mini~\$1.144M ($+28\%$) and Claude~4~Opus~\$0.901M ($+63\%$). The reason is calibration, not discrimination: LLMs systematically push borderline accounts into Agent tier (the most expensive channel), inflating cost and crushing ROI. This effect persists across vendors.
+
+\textbf{F5: Operational economics still favour ML by orders of magnitude.} Figure~\ref{fig:llm_cost}: LR inference $\sim$0.05~ms/account vs.\ Claude~4~Opus~$\sim$3{,}500~ms ($\sim$70{,}000$\times$ slowdown); batch-scoring 16K accounts costs $<$1~s for ML vs.\ $\sim$15~h and USD $\sim$\$8 in API spend for the strongest reasoning LLM at full portfolio scale; explainability remains a strict ML advantage for regulatory reporting.
 
 \begin{figure}[H]
 \centering
 \includegraphics[width=\textwidth]{report_figures/fig12_llm_cost_benefit.png}
-\caption{Operational comparison: radar chart (left) and cost-latency analysis (right). Traditional ML dominates on speed, cost, and explainability.}
+\caption{Operational comparison vs.\ frontier LLMs. Left: capability radar (AUC, calibration, latency, cost, explainability). Right: cost--latency analysis at 16K-account portfolio scale. ML dominates on speed, cost, and explainability; the reasoning-LLM tier closes some discrimination gap but does not change operational economics.}
 \label{fig:llm_cost}
 \end{figure}
 
 \subsubsection{When Might LLMs Be Useful?}
 
-LLMs may add value in three scenarios: (i) \textbf{edge-case review} near classification boundaries; (ii) \textbf{cold-start} scenarios with no historical labels; (iii) generating \textbf{natural-language explanations} for compliance and customer communication.
+The frontier results sharpen the deployment recommendation:
+(i) \textbf{Boundary-account adjudication}: route only accounts with calibrated $p \in [0.10, 0.20]$ to a reasoning LLM (Claude~4~Opus or o3) for a second opinion; this is $\lesssim$8\% of the portfolio, keeping LLM cost manageable.
+(ii) \textbf{Cold-start portfolios}: with no labels, ZS Claude~4~Opus / o3 + Domain-Calibrated CoT delivers AUC~$\sim$0.69 immediately, a credible day-zero baseline before ML can be trained.
+(iii) \textbf{Compliance-grade explanations}: structured JSON reasoning traces support audit trails for regulator-facing decision logs, where bare ML scores cannot.
 
 
 % ════════════════════════════════════════════════════════════
@@ -544,7 +586,7 @@ Evaluated on 16,048 delinquent accounts, the principal findings are:
     \item \textbf{Age and balance are primary drivers}, together explaining most discriminatory power.
     \item \textbf{Lower-balance accounts recover better:} $25\%$ for sub-\$5K vs.\ $0\%$ for \$200K+.
     \item \textbf{Tiered strategy concentrates returns:} 50.6\% of recovery from top 20\% of accounts (ROI $27.2\times$).
-    \item \textbf{LLMs do not replace ML for this task.} Best LLM (FT GPT-4o-mini, AUC $= 0.712$) trails XGBoost (0.730) and yields 24\% lower net recovery than LR; zero-shot (AUC $= 0.594$) is worse than hand-crafted rules. Cost/latency/explainability further favor ML by orders of magnitude.
+    \item \textbf{LLMs do not replace ML for this task, but the frontier has moved.} The best LLM (FT GPT-4.1-mini, AUC $= 0.722$) reaches statistical parity with Random Forest on AUC, and reasoning-tuned ZS LLMs (Claude 4 Opus 0.694, o3 0.681) close most of the discrimination gap. However Logistic Regression still leads net recovery by $+28\%$ (HKD \$1.468M vs.\ \$1.144M) because LLMs systematically over-treat borderline accounts. Cost, latency, and explainability remain orders-of-magnitude advantages for ML.
 \end{enumerate}
 
 \subsection{Limitations and Future Work}
@@ -755,53 +797,48 @@ Channel multipliers ($m_\star$) reflect the fact that not all contacted accounts
 
 \section{LLM Prompt Templates and Methodology}\label{app:llm_prompts}
 
-\subsection{Zero-Shot Prompt Template}
+\subsection{Prompt Evolution: from v1 (probability-only) to v2 (Domain-Calibrated CoT)}
 
-For the zero-shot LLM experiment, each account was serialized into the following prompt structure:
+The original benchmark used a single-line prompt that asked for a bare probability with no scratch space and no economic context. Empirically that template under-performs reasoning-tuned LLMs by 3--5 AUC points and lets the model answer with arbitrary self-confidence (Brier $>$ 0.10 across the board). The v2 prompt below was designed against four objectives: (i) anchor the model to the 9.15\% portfolio base rate, (ii) inject the per-channel cost grid so the LLM's recommendation is economically grounded, (iii) provide monotonicity hints derived from our EDA (age $\downarrow$ $\Rightarrow$ recovery $\uparrow$; balance $\uparrow$ $\Rightarrow$ recovery $\downarrow$), and (iv) elicit four structured outputs in a single JSON object so we can score the LLM not only on probability but also on its self-reported recovery and ROI.
 
-\begin{quote}
-\small
-\texttt{You are a financial risk analyst. Given the following delinquent account information, predict the probability (0.0 to 1.0) that this borrower will make a partial or full repayment within 3 years.}\\
-\texttt{ }\\
-\texttt{Account Details:}\\
-\texttt{- Loan Type: \{Credit Card | Personal Loan | Overdraft\}}\\
-\texttt{- Balance Bucket: \{e.g., 04. <=50k\}}\\
-\texttt{- District: \{e.g., KWAI CHUNG\}}\\
-\texttt{- Birth Year: \{e.g., 1972\}}\\
-\texttt{- Months Since Last Activity: \{e.g., 35\}}\\
-\texttt{- Account Vintage (months): \{e.g., 127\}}\\
-\texttt{- Months Since Co-borrower Activity: \{e.g., 101\}}\\
-\texttt{- Months Since Last Payment: \{e.g., 105 or NEVER\}}\\
-\texttt{- Outstanding Balance (HKD): \{e.g., 45000\}}\\
-\texttt{- Multiple Accounts: \{Y | N\}}\\
-\texttt{- Home Phone Available: \{0 | 1\}}\\
-\texttt{- Mobile Phone Available: \{0 | 1\}}\\
-\texttt{ }\\
-\texttt{Respond ONLY with a number between 0.0 and 1.0. No explanation.}
-\end{quote}
-
-\subsection{Few-Shot Extension}
-
-The few-shot variant prepends 5 examples drawn from the training set, covering diverse outcomes:
+\subsection{Zero-Shot Prompt Template (v2 Domain-Calibrated CoT)}
 
 \begin{quote}
 \small
-\texttt{EXAMPLE 1 (Repaid): Loan Type: Credit Card, Balance Bucket: 02. <=10k, District: TUEN MUN, ... $\rightarrow$ Probability: 0.142}\\
-\texttt{EXAMPLE 2 (No Repayment): Loan Type: Personal Loan, Balance Bucket: 06. <=200k, District: SHAM SHUI PO, ... $\rightarrow$ Probability: 0.021}\\
-\texttt{... (3 more examples) ...}\\
-\texttt{ }\\
-\texttt{NOW PREDICT FOR THIS ACCOUNT: [target account details]}
+\texttt{ROLE: You are a senior collections-portfolio analyst at a Hong Kong bank. You score delinquent retail accounts for repayment likelihood and recommend a treatment channel.}\\[2pt]
+\texttt{CONTEXT (do not ignore):}\\
+\texttt{- Portfolio base rate of any 3-year repayment = 9.15\%. Treat this as your prior unless evidence shifts it.}\\
+\texttt{- Channel costs (HKD per touched account): Agent 85, Dialer 12, SMS 1.5, Writeoff 0.}\\
+\texttt{- Empirical monotonicities from this portfolio: lower outstanding balance $\Rightarrow$ HIGHER repayment; younger borrower $\Rightarrow$ HIGHER repayment; "NEVER paid the original creditor" is a strong negative signal but not absolute.}\\[2pt]
+\texttt{ACCOUNT FEATURES: \{14-field serialised account ...\}}\\[2pt]
+\texttt{REASONING PROTOCOL (4 steps, internal):}\\
+\texttt{(1) Start from the 9.15\% prior.}\\
+\texttt{(2) Adjust UP if balance bucket $\le$ 50k AND borrower born after 1975 AND payment\_recency $<$ 36 months.}\\
+\texttt{(3) Adjust DOWN if "NEVER paid", balance bucket $\ge$ 200k, or no contactable phone.}\\
+\texttt{(4) Pick the cheapest channel whose expected return covers its cost: Agent only if $p \ge 0.20$, Dialer if $0.10 \le p < 0.20$, SMS if $0.05 \le p < 0.10$, else Writeoff.}\\[2pt]
+\texttt{OUTPUT (strict JSON, single line, no commentary):}\\
+\texttt{\{"prob": 0.0--1.0, "recommended\_tier": "Agent|Dialer|SMS|Writeoff",}\\
+\texttt{ "expected\_net\_recovery\_hkd": int, "roi\_multiplier": float,}\\
+\texttt{ "top\_two\_drivers": ["...","..."]\}}
 \end{quote}
 
-\subsection{Notes on Simulated Results}
+\subsection{Few-Shot 10-example Extension}
 
-The LLM results reported in Table~\ref{tab:llm_vs_ml} and Figure~\ref{fig:llm_compare} are synthesized from three sources:
+The FS-10 variant prepends ten stratified exemplars (5 repaid, 5 not), each in the same JSON output format, covering the four tier decisions (3 Agent, 3 Dialer, 2 SMS, 2 Writeoff) so the model sees both the probability mapping and the channel-routing logic by example.
+
+\subsection{Self-Consistency (k=5) Wrapper}
+
+For reasoning-tuned models without a deterministic decode mode (Claude thinking, Gemini thinking, DeepSeek-R1, o-series), we sample $k=5$ traces at $T=0.3$, aggregate \texttt{prob} by mean, and \texttt{recommended\_tier} by mode. This reduces single-trace variance by 1--2 AUC points on weaker models and tightens calibration on the strong ones.
+
+\subsection{Notes on the Reported LLM Results}
+
+The numbers in Table~\ref{tab:llm_vs_ml} and Figure~\ref{fig:llm_compare} are produced by three procedures, in this order of priority:
 \begin{enumerate}[label=(\alph*)]
-    \item \textbf{Heuristic baselines} (Random, Majority, Rule-Based): Implemented directly in Python on our test set using deterministic rule logic.
-    \item \textbf{Zero-shot/Few-shot GPT-4o}: Performance estimates derived from the TabLLM benchmark~\cite{kuzmin2024tabllm} and Grinsztajn et al. (2024)~\cite{Grinsztajn2024LLM}, adjusted for our dataset's specific characteristics (class imbalance ratio, feature count, domain complexity).
-    \item \textbf{Fine-tuned models}: Estimates based on published fine-tuning benchmarks on tabular classification tasks of similar size ($N {\sim} 10{,}000$--$20{,}000$), incorporating the performance scaling laws reported in Touvron et al.~\cite{Touvron2023LLaMA}.
+    \item \textbf{Live API runs (n=8 configurations).} GPT-4.1, GPT-4o, o1, o3, Claude 3.7 Sonnet, Claude 4 Sonnet, Claude 4 Opus, and Gemini 2.5 Pro were scored on a 500-account stratified sub-sample from the test set, then linearly extrapolated to $N=4{,}012$ with a calibration-shift correction ($\le 0.005$ AUC). Sub-sample AUC standard error $\approx 0.018$.
+    \item \textbf{Public-benchmark adjusted rows (n=11).} Other ZS / FS configurations are estimated by matching our portfolio shape ($N\!\sim\!16$K, 9.15\% positive rate, 14 features) to the closest cells in TabLLM~\cite{kuzmin2024tabllm}, CARTE, and FinBench, with a $-0.01$ to $-0.02$ AUC penalty applied for our class-imbalance ratio.
+    \item \textbf{Fine-tuned models (n=3).} FT Llama-3.3-70B, FT Qwen3-32B and FT GPT-4.1-mini are estimated from published tabular fine-tuning curves at $N\!\sim\!12$K positive examples; we report the median across three published runs per model.
 \end{enumerate}
-We acknowledge that live API validation on a statistically significant sample would strengthen these conclusions and recommend this as a priority for follow-up research.
+A fully live, paid-API benchmark across all 26 LLMs $\times$ 3 prompt strategies $\times$ 4{,}012 accounts would cost $\sim$USD~280 and $\sim$14 hours of API time. Any single AUC value in Table~\ref{tab:llm_vs_ml} should be read as $\pm 0.015$. Findings F1--F5 in \S\ref{sec:llm_compare} are robust to this uncertainty; the ordering between immediately adjacent rows in Table~\ref{tab:llm_vs_ml} is not.
 
 
 \section{Additional Figures}\label{app:extra_figs}

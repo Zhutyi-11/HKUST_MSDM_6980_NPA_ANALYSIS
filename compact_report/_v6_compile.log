@@ -1,0 +1,202 @@
+pdflatex: security risk: running with elevated privileges
+This is pdfTeX, Version 3.141592653-2.6-1.40.28 (MiKTeX 25.12) (preloaded format=pdflatex.fmt)
+ restricted \write18 enabled.
+entering extended mode
+(MSDM6980_Report_v6_compact.tex
+LaTeX2e <2025-11-01>
+L3 programming layer <2025-12-24>
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/base\article.cls
+Document Class: article 2025/01/22 v1.4n Standard LaTeX document class
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/base\size11.clo))
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.st
+y
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/graphics\keyval.sty)
+ (C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/iftex\ifvtex.sty
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/iftex\iftex.sty))
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/geometry\geometry.cf
+g))
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/setspace\setspace.st
+y) (C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/base\inputenc.sty
+) (C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/base\fontenc.sty)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/lm\lmodern.sty)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphicx.st
+y
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/graphics\graphics.st
+y (C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/graphics\trig.sty)
+
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\graphic
+s.cfg)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/graphics-def\pdftex.
+def)))
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/booktabs\booktabs.st
+y)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsmath.sty
+For additional information on amsmath, use the `?' option.
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amstext.sty
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsgen.sty))
+ (C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsbsy.sty)
+ (C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/amsmath\amsopn.sty)
+)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\amssymb.sty
+
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\amsfonts.st
+y)) (C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/float\float.sty)
+ (C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption.sty
+
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/caption\caption3.sty
+))
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/caption\subcaption.s
+ty)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/multirow\multirow.st
+y)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hyperref.st
+y
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/kvsetkeys\kvsetkeys.
+sty)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/kvdefinekeys\kvdef
+inekeys.sty)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/pdfescape\pdfescap
+e.sty
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/ltxcmds\ltxcmds.st
+y)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/pdftexcmds\pdftexc
+mds.sty
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/infwarerr\infwarer
+r.sty)))
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/hycolor\hycolor.sty)
+
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\nameref.sty
+
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/refcount\refcount.st
+y)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/gettitlestring\get
+titlestring.sty
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/kvoptions\kvoptions.
+sty)))
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/etoolbox\etoolbox.st
+y)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/stringenc\stringen
+c.sty)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\pd1enc.def)
+
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/intcalc\intcalc.st
+y)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\puenc.def)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/url\url.sty)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/bitset\bitset.sty
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/bigintcalc\bigintc
+alc.sty)))
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/hyperref\hpdftex.def
+
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/rerunfilecheck\rerun
+filecheck.sty
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/generic/uniquecounter\uniq
+uecounter.sty)))
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/xcolor\xcolor.sty
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/graphics-cfg\color.c
+fg)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/graphics\mathcolor.l
+tx)) (C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/tools\array.sty
+)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/enumitem\enumitem.st
+y)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/titlesec\titlesec.st
+y) (C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/lm\t1lmr.fd)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/l3backend\l3backend-
+pdftex.def) (MSDM6980_Report_v6_compact.aux)
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/context/base/mkii\supp-pdf
+.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/epstopdf-pkg\epstopd
+f-base.sty
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/00miktex\epstopdf-sy
+s.cfg)) (MSDM6980_Report_v6_compact.out) (MSDM6980_Report_v6_compact.out)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/lm\ot1lmr.fd)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/lm\omllmm.fd)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/lm\omslmsy.fd)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/lm\omxlmex.fd)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsa.fd)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/amsfonts\umsb.fd)
+
+LaTeX Warning: Reference `sec:results' on page 1 undefined on input line 80.
+
+
+LaTeX Warning: Reference `sec:llm_compare' on page 1 undefined on input line 80
+.
+
+
+LaTeX Warning: Reference `sec:discussion' on page 1 undefined on input line 80.
+
+
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/lm\ts1lmr.fd)
+(C:\Users\marcozhu\AppData\Local\Programs\MiKTeX\tex/latex/lm\t1lmtt.fd)
+Overfull \hbox (62.193pt too wide) in paragraph at lines 88--89
+[]\T1/lmr/bx/n/10.95 End-to-end ML pipeline. \T1/lmr/m/n/10.95 Domain-aware mis
+sing-value han-dling for \T1/lmtt/m/n/10.95 last_pay_date_client_closing_m
+[1{C:/Users/marcozhu/AppData/Local/MiKTeX/fonts/map/pdftex/pdftex.map}{C:/Users
+/marcozhu/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-ec.enc}{C:/Users/
+marcozhu/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathsy.enc}{C:/Use
+rs/marcozhu/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-rm.enc}]
+
+LaTeX Warning: Reference `app:llm_prompts' on page 2 undefined on input line 89
+.
+
+
+LaTeX Warning: Reference `app:schema' on page 2 undefined on input line 97.
+
+
+LaTeX Warning: Citation `little2002' on page 2 undefined on input line 97.
+
+
+Overfull \hbox (52.51405pt too wide) in paragraph at lines 97--98
+\T1/lmr/m/n/10.95 contact-channel flags (full schema in App. []). The 1,165 (7.
+3%) nulls in \T1/lmtt/m/n/10.95 last_pay_date_client_closing_m
+
+LaTeX Warning: Reference `app:hparams' on page 2 undefined on input line 101.
+
+
+LaTeX Warning: Reference `app:mlp_deriv' on page 2 undefined on input line 101.
+
+
+
+Overfull \hbox (201.02849pt too wide) in paragraph at lines 101--102
+\T1/lmr/m/n/10.95 scale_pos_weight9.18; (iv) \T1/lmr/bx/n/10.95 MLP v2\T1/lmr/m
+/n/10.95 : Linear(256)$\OMS/lmsy/m/n/10.95 !$\T1/lmr/m/n/10.95 Swish$\OMS/lmsy/
+m/n/10.95 !$\T1/lmr/m/n/10.95 ResBlock(128)$\OMS/lmsy/m/n/10.95 !$\T1/lmr/m/n/1
+0.95 FeatureInteraction(64)$\OMS/lmsy/m/n/10.95 !$\T1/lmr/m/n/10.95 Linear(32)$
+\OMS/lmsy/m/n/10.95 !$\T1/lmr/m/n/10.95 Dropout(0.3)$\OMS/lmsy/m/n/10.95 !$\T1/
+lmr/m/n/10.95 Output,
+
+LaTeX Warning: Reference `tab:tiers' on page 2 undefined on input line 111.
+
+
+LaTeX Warning: Reference `app:econ_params' on page 2 undefined on input line 11
+1.
+
+[2{C:/Users/marcozhu/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-ts1.en
+c}{C:/Users/marcozhu/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mathit
+.enc}{C:/Users/marcozhu/AppData/Local/Programs/MiKTeX/fonts/enc/dvips/lm/lm-mat
+hex.enc}]
+
+LaTeX Warning: Reference `tab:model_compare' on page 3 undefined on input line 
+135.
+
+
+LaTeX Warning: Reference `fig:model_comp' on page 3 undefined on input line 135
+.
+
+
+LaTeX Warning: Reference `app:extra_figs' on page 3 undefined on input line 135
+.
+
+! Undefined control sequence.
+l.147 Logistic Regression & 0.6994 & \cellcolor
+                                               {best}0.0842 & 74.15\% & 15.4...
+
+!  ==> Fatal error occurred, no output PDF file produced!
+Transcript written on MSDM6980_Report_v6_compact.log.
+pdflatex: major issue: So far, you have not checked for MiKTeX updates.

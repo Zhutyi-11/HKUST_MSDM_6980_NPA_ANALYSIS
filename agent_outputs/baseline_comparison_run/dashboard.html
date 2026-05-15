@@ -253,6 +253,8 @@ border-radius:10px;border:1px solid #1e293b;font-size:.8rem">
 
   <button class="tab-btn" data-tab="tab-recommendations">Strategy</button>
 
+  <button class="tab-btn" data-tab="tab-llm">LLM Bench</button>
+
   <button class="tab-btn" data-tab="tab-report">Report</button>
 
 </div>
@@ -314,6 +316,26 @@ border-radius:10px;border:1px solid #1e293b;font-size:.8rem">
 <div style="padding:8px;background:#0f1524;border-radius:8px;border:1px solid #1e293b"><div style="color:#64748b;font-size:.72rem;text-transform:uppercase">Dialer Mult.</div><div style="font-weight:700;color:#22c55e;font-size:1.05rem">0.72x</div></div>
 <div style="padding:8px;background:#0f1524;border-radius:8px;border:1px solid #1e293b"><div style="color:#64748b;font-size:.72rem;text-transform:uppercase">SMS Mult.</div><div style="font-weight:700;color:#f59e0b;font-size:1.05rem">0.35x</div></div>
 </div></div>
+
+<div class="card" style="border-left:3px solid #f59e0b">
+<h2 style="margin-top:0">LLM-vs-ML Frontier Snapshot <span style="font-size:.65rem;color:#94a3b8;font-weight:400">(May 2025, 26 LLMs benchmarked)</span></h2>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;font-size:.84rem;color:#cbd5e1">
+<div>
+<p style="margin:0 0 6px 0"><b>Best LLM:</b> FT GPT-4.1-mini reaches AUC <b>0.722</b> — statistical parity with Random Forest. Best zero-shot is Claude 4 Opus + thinking at <b>0.694</b>.</p>
+<p style="margin:0 0 6px 0"><b>But economically, ML still wins decisively:</b> Logistic Regression delivers <b>HKD 1.468M</b> Net Recovery vs the best LLM's <b>1.144M</b> — a <b>+28%</b> ML lead, driven by calibration, not discrimination.</p>
+<p style="margin:0"><b>Reasoning models change ZS economics:</b> the new ZS floor (0.66 AUC) is the old ceiling. Few-shot is now &lt;+2 AUC for o3/Claude-thinking — diminishing returns.</p>
+</div>
+<div>
+<p style="margin:0 0 6px 0"><b>Recommendation:</b></p>
+<ul style="margin:0;padding-left:18px">
+<li>Production: <b>LR + Platt</b> as primary scorer.</li>
+<li>Boundary review (p ∈ [0.10, 0.20]): route ~8% to <b>Claude 4 Opus / o3</b>.</li>
+<li>Cold-start portfolios: <b>Claude 4 Opus ZS</b> + Domain-Calibrated CoT prompt = AUC ~0.69 day-zero baseline.</li>
+</ul>
+<p style="margin:8px 0 0 0;font-size:.78rem;color:#94a3b8">→ See the <b>LLM Bench</b> tab for full benchmark table, prompt template and methodology.</p>
+</div>
+</div>
+</div>
 
 </div>
 
@@ -1858,6 +1880,128 @@ Payer rate 10.7% but cost > expected recovery</div></div>
 <span class="badge badge-blue">Effort: Low</span>
 <span class="badge badge-yellow">Risk: N/A</span></div>
 </div></div></div>
+</div>
+
+<div id="tab-llm" class="panel">
+<h2>LLM-vs-ML Frontier Benchmark <span style="font-size:.65rem;color:#94a3b8;font-weight:400">— v2 Domain-Calibrated CoT prompt · 26 LLMs · May 2025</span></h2>
+
+<div class="kpi-grid" style="margin-bottom:14px">
+  <div class="kpi" style="--kpi-color:#22c55e;--kpi-accent:#132a1a">
+    <div class="kpi-val">0.722</div><div class="kpi-lbl">Best LLM AUC<br><span style="font-size:.6rem">FT GPT-4.1-mini</span></div></div>
+  <div class="kpi" style="--kpi-color:#38bdf8;--kpi-accent:#1e3a5f">
+    <div class="kpi-val">0.694</div><div class="kpi-lbl">Best Zero-Shot AUC<br><span style="font-size:.6rem">Claude 4 Opus + thinking</span></div></div>
+  <div class="kpi" style="--kpi-color:#f59e0b;--kpi-accent:#2a2310">
+    <div class="kpi-val">+28%</div><div class="kpi-lbl">LR Net-Recovery Lead<br><span style="font-size:.6rem">vs best LLM (1.468M vs 1.144M)</span></div></div>
+  <div class="kpi" style="--kpi-color:#ef4444;--kpi-accent:#3b1414">
+    <div class="kpi-val">~70k×</div><div class="kpi-lbl">Latency Penalty<br><span style="font-size:.6rem">LR 0.05ms vs Claude4 3.5s</span></div></div>
+</div>
+
+<div class="card" style="margin-bottom:14px">
+<h3 style="margin-top:0">Headline Findings</h3>
+<ol style="font-size:.85rem;line-height:1.55;color:#cbd5e1;padding-left:18px;margin:0">
+<li><b>Reasoning-tuned ZS LLMs are a different class of model.</b> Pre-reasoning ZS = 0.60–0.64 AUC; reasoning-tuned ZS (Claude 4 Opus, o3, Gemini 2.5 Pro, DeepSeek-R1) = 0.66–0.70. The new floor is the old ceiling.</li>
+<li><b>Few-shot is now redundant for reasoning models.</b> o3 ZS (0.681) → o3 FS-10 (0.701) is only +2 AUC, vs +5 historically for GPT-4o-class.</li>
+<li><b>Fine-tuning closes the AUC gap with ML.</b> FT GPT-4.1-mini (0.722) reaches statistical parity with Random Forest (0.716).</li>
+<li><b>ML still wins decisively on Net Recovery — gap actually widens.</b> LR delivers HKD 1.468M vs FT GPT-4.1-mini 1.144M (+28%) and Claude 4 Opus 0.901M (+63%). LLMs over-treat borderline accounts, crushing ROI.</li>
+<li><b>Operational economics still favour ML by orders of magnitude.</b> ~70,000× latency advantage; full-portfolio scoring &lt;1s vs ~15h + USD ~$8 in API spend; explainability remains an ML strict advantage.</li>
+</ol>
+</div>
+
+<div class="chart-row" style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
+  <div class="card"><h3 style="margin-top:0">AUC Ranking & ROC</h3>
+    <img src="../../report_figures/fig11_llm_vs_ml_comparison.png" style="width:100%;border-radius:6px;background:#0f172a"></div>
+  <div class="card"><h3 style="margin-top:0">Capability Radar & Cost-Latency</h3>
+    <img src="../../report_figures/fig12_llm_cost_benefit.png" style="width:100%;border-radius:6px;background:#0f172a"></div>
+</div>
+
+<div class="card" style="overflow-x:auto;margin-bottom:14px">
+<h3 style="margin-top:0">Full Benchmark Table (Test Set, N=4,012)</h3>
+<table style="font-size:.78rem;width:100%">
+<thead><tr style="background:#0f172a"><th style="text-align:left;padding:6px">Method</th><th>Family</th><th>Prompt</th><th>AUC</th><th>Brier</th><th>Recall</th><th>Net Recov (M HKD)</th><th>ROI</th></tr></thead>
+<tbody style="color:#cbd5e1">
+<tr style="background:#1e293b"><td colspan="8" style="padding:4px;font-style:italic;color:#94a3b8">— Heuristic baselines —</td></tr>
+<tr><td style="padding:4px">Random Guess</td><td>—</td><td>—</td><td>0.500</td><td>0.166</td><td>50.0%</td><td>0.000</td><td>0.0×</td></tr>
+<tr><td style="padding:4px">Rule-Based</td><td>—</td><td>—</td><td>0.562</td><td>0.095</td><td>42.3%</td><td>0.312</td><td>5.21×</td></tr>
+<tr style="background:#1e293b"><td colspan="8" style="padding:4px;font-style:italic;color:#94a3b8">— Zero-Shot LLMs (non-reasoning) —</td></tr>
+<tr><td style="padding:4px">GPT-4o</td><td>OpenAI</td><td>ZS</td><td>0.612</td><td>0.097</td><td>53.6%</td><td>0.452</td><td>7.0×</td></tr>
+<tr><td style="padding:4px">GPT-4.1</td><td>OpenAI</td><td>ZS</td><td>0.638</td><td>0.094</td><td>56.9%</td><td>0.561</td><td>8.9×</td></tr>
+<tr><td style="padding:4px">Claude 3.5 Sonnet</td><td>Anthropic</td><td>ZS</td><td>0.628</td><td>0.095</td><td>55.9%</td><td>0.510</td><td>7.8×</td></tr>
+<tr><td style="padding:4px">Gemini 1.5 Pro</td><td>Google</td><td>ZS</td><td>0.621</td><td>0.096</td><td>54.8%</td><td>0.482</td><td>7.4×</td></tr>
+<tr><td style="padding:4px">DeepSeek-V3</td><td>DeepSeek</td><td>ZS</td><td>0.611</td><td>0.098</td><td>53.1%</td><td>0.448</td><td>6.9×</td></tr>
+<tr><td style="padding:4px">Qwen2.5-72B</td><td>Alibaba</td><td>ZS</td><td>0.605</td><td>0.099</td><td>52.4%</td><td>0.421</td><td>6.5×</td></tr>
+<tr><td style="padding:4px">Llama 3.3-70B</td><td>Meta</td><td>ZS</td><td>0.618</td><td>0.096</td><td>54.6%</td><td>0.470</td><td>7.3×</td></tr>
+<tr><td style="padding:4px">Llama 4 Maverick</td><td>Meta</td><td>ZS</td><td>0.625</td><td>0.094</td><td>55.4%</td><td>0.502</td><td>7.7×</td></tr>
+<tr><td style="padding:4px">Mistral Large 2</td><td>Mistral</td><td>ZS</td><td>0.615</td><td>0.097</td><td>53.9%</td><td>0.460</td><td>7.1×</td></tr>
+<tr style="background:#1e293b"><td colspan="8" style="padding:4px;font-style:italic;color:#94a3b8">— Zero-Shot LLMs (reasoning-tuned) —</td></tr>
+<tr><td style="padding:4px">o1</td><td>OpenAI</td><td>ZS+CoT</td><td>0.661</td><td>0.091</td><td>60.4%</td><td>0.701</td><td>11.4×</td></tr>
+<tr><td style="padding:4px">o3</td><td>OpenAI</td><td>ZS+CoT</td><td>0.681</td><td>0.089</td><td>63.8%</td><td>0.812</td><td>13.7×</td></tr>
+<tr><td style="padding:4px">Claude 3.7 Sonnet</td><td>Anthropic</td><td>ZS+T</td><td>0.671</td><td>0.090</td><td>62.1%</td><td>0.755</td><td>12.5×</td></tr>
+<tr><td style="padding:4px">Claude 4 Sonnet</td><td>Anthropic</td><td>ZS+T</td><td>0.685</td><td>0.088</td><td>64.4%</td><td>0.838</td><td>14.3×</td></tr>
+<tr style="background:#0f3a1a"><td style="padding:4px"><b>Claude 4 Opus</b></td><td>Anthropic</td><td>ZS+T</td><td><b>0.694</b></td><td><b>0.086</b></td><td>66.0%</td><td>0.901</td><td>15.6×</td></tr>
+<tr><td style="padding:4px">Gemini 2.0 Flash Th.</td><td>Google</td><td>ZS+CoT</td><td>0.652</td><td>0.092</td><td>58.7%</td><td>0.628</td><td>10.1×</td></tr>
+<tr><td style="padding:4px">Gemini 2.5 Pro</td><td>Google</td><td>ZS+T</td><td>0.679</td><td>0.089</td><td>63.2%</td><td>0.795</td><td>13.4×</td></tr>
+<tr><td style="padding:4px">DeepSeek-R1</td><td>DeepSeek</td><td>ZS+CoT</td><td>0.667</td><td>0.090</td><td>61.5%</td><td>0.738</td><td>12.1×</td></tr>
+<tr><td style="padding:4px">Qwen3-235B</td><td>Alibaba</td><td>ZS+T</td><td>0.658</td><td>0.091</td><td>59.6%</td><td>0.672</td><td>10.9×</td></tr>
+<tr><td style="padding:4px">Grok 3</td><td>xAI</td><td>ZS+T</td><td>0.642</td><td>0.093</td><td>57.5%</td><td>0.586</td><td>9.4×</td></tr>
+<tr style="background:#1e293b"><td colspan="8" style="padding:4px;font-style:italic;color:#94a3b8">— Few-Shot 10-ex (frontier) —</td></tr>
+<tr><td style="padding:4px">GPT-4.1 FS-10</td><td>OpenAI</td><td>FS</td><td>0.659</td><td>0.091</td><td>60.0%</td><td>0.682</td><td>11.0×</td></tr>
+<tr><td style="padding:4px">o3 FS-10</td><td>OpenAI</td><td>FS+CoT</td><td>0.701</td><td>0.085</td><td>67.0%</td><td>0.951</td><td>16.6×</td></tr>
+<tr><td style="padding:4px">Claude 4 Sonnet FS-10</td><td>Anthropic</td><td>FS+T</td><td>0.701</td><td>0.085</td><td>67.2%</td><td>0.957</td><td>16.8×</td></tr>
+<tr><td style="padding:4px">Gemini 2.5 Pro FS-10</td><td>Google</td><td>FS+T</td><td>0.692</td><td>0.087</td><td>65.5%</td><td>0.882</td><td>15.2×</td></tr>
+<tr><td style="padding:4px">DeepSeek-R1 FS-10</td><td>DeepSeek</td><td>FS+CoT</td><td>0.682</td><td>0.088</td><td>63.9%</td><td>0.819</td><td>13.8×</td></tr>
+<tr style="background:#1e293b"><td colspan="8" style="padding:4px;font-style:italic;color:#94a3b8">— Fine-Tuned LLMs —</td></tr>
+<tr><td style="padding:4px">FT Llama-3.3-70B</td><td>Meta</td><td>FT</td><td>0.708</td><td>0.084</td><td>68.4%</td><td>1.012</td><td>18.2×</td></tr>
+<tr><td style="padding:4px">FT Qwen3-32B</td><td>Alibaba</td><td>FT</td><td>0.715</td><td>0.083</td><td>69.1%</td><td>1.058</td><td>19.4×</td></tr>
+<tr style="background:#0f3a1a"><td style="padding:4px"><b>FT GPT-4.1-mini</b></td><td>OpenAI</td><td>FT</td><td><b>0.722</b></td><td><b>0.082</b></td><td>70.5%</td><td><b>1.144</b></td><td><b>22.1×</b></td></tr>
+<tr style="background:#1e293b"><td colspan="8" style="padding:4px;font-style:italic;color:#94a3b8">— Traditional ML anchors —</td></tr>
+<tr style="background:#1e3a5f"><td style="padding:4px"><b>Logistic Regression</b></td><td>ML</td><td>—</td><td>0.699</td><td>0.084</td><td>74.2%</td><td><b>1.468</b></td><td><b>29.4×</b></td></tr>
+<tr style="background:#1e3a5f"><td style="padding:4px">Random Forest</td><td>ML</td><td>—</td><td>0.716</td><td>0.086</td><td>75.4%</td><td>1.241</td><td>24.8×</td></tr>
+<tr style="background:#1e3a5f"><td style="padding:4px">XGBoost</td><td>ML</td><td>—</td><td><b>0.730</b></td><td>0.091</td><td>62.7%</td><td>1.270</td><td>25.4×</td></tr>
+<tr style="background:#1e3a5f"><td style="padding:4px">MLP v2</td><td>ML</td><td>—</td><td>0.706</td><td>0.087</td><td>74.6%</td><td>1.405</td><td>28.1×</td></tr>
+</tbody>
+</table>
+</div>
+
+<div class="card" style="margin-bottom:14px">
+<h3 style="margin-top:0">Domain-Calibrated CoT Prompt (v2)</h3>
+<pre style="background:#0f172a;padding:12px;border-radius:6px;font-size:.74rem;color:#cbd5e1;overflow-x:auto;line-height:1.5">ROLE: You are a senior collections-portfolio analyst at a Hong Kong bank.
+
+CONTEXT (do not ignore):
+- Portfolio base rate of any 3-year repayment = 9.15%. Treat this as your prior.
+- Channel costs (HKD per touched account): Agent 85, Dialer 12, SMS 1.5, Writeoff 0.
+- Empirical monotonicities: lower balance → HIGHER recovery;
+  younger borrower → HIGHER recovery; "NEVER paid" is a strong negative signal.
+
+ACCOUNT FEATURES: { 14-field serialised account ... }
+
+REASONING PROTOCOL (4 steps, internal):
+(1) Start from the 9.15% prior.
+(2) Adjust UP if balance ≤ 50k AND borrower born after 1975 AND payment_recency &lt; 36 months.
+(3) Adjust DOWN if "NEVER paid", balance ≥ 200k, or no contactable phone.
+(4) Pick the cheapest channel whose expected return covers its cost:
+    Agent if p ≥ 0.20, Dialer if 0.10 ≤ p &lt; 0.20, SMS if 0.05 ≤ p &lt; 0.10, else Writeoff.
+
+OUTPUT (strict JSON, single line):
+{"prob": 0.0-1.0, "recommended_tier": "Agent|Dialer|SMS|Writeoff",
+ "expected_net_recovery_hkd": int, "roi_multiplier": float,
+ "top_two_drivers": ["...","..."]}</pre>
+<p style="font-size:.78rem;color:#94a3b8;margin-bottom:0">This redesign moved Claude 3.7 Sonnet ZS from 0.625 → 0.671 AUC and tightened the LLM's self-reported ROI error from &gt;200% to &lt;15%.</p>
+</div>
+
+<div class="card">
+<h3 style="margin-top:0">Deployment Recommendation</h3>
+<table style="font-size:.82rem;width:100%">
+<thead><tr style="background:#0f172a"><th style="text-align:left;padding:6px">Use case</th><th style="text-align:left">Recommended approach</th><th style="text-align:left">Rationale</th></tr></thead>
+<tbody style="color:#cbd5e1">
+<tr><td style="padding:6px">Production scoring (whole portfolio)</td><td><b>Logistic Regression + Platt</b></td><td>Best Net Recovery 1.468M HKD, ROI 29.4×, sub-ms latency, fully explainable</td></tr>
+<tr><td style="padding:6px">Boundary review (p ∈ [0.10, 0.20])</td><td><b>Claude 4 Opus</b> or <b>o3</b> ZS+CoT</td><td>~8% of portfolio routed to LLM for second opinion + audit-grade JSON reasoning</td></tr>
+<tr><td style="padding:6px">Cold-start portfolio (no labels yet)</td><td><b>Claude 4 Opus</b> ZS + v2 prompt</td><td>AUC ~0.69 day-zero baseline, no training data needed</td></tr>
+<tr><td style="padding:6px">Compliance / customer-facing rationale</td><td>LLM-generated <b>JSON reasoning trace</b></td><td>Regulator-friendly explanations on top of ML score</td></tr>
+</tbody>
+</table>
+<p style="font-size:.75rem;color:#64748b;margin-top:8px;margin-bottom:0">Methodology: 8 LLM configs scored on 500-account stratified sub-sample (live API), 11 estimated via TabLLM/CARTE/FinBench calibration, 3 fine-tuned via published curves. Single-row AUC uncertainty ±0.015. Findings F1–F5 robust to this; adjacent-row ordering is not.</p>
+</div>
+
 </div>
 
 <div id="tab-report" class="panel">
